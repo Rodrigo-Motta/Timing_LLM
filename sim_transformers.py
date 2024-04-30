@@ -19,7 +19,15 @@ data = DatasetLoader()
 #               'multi-qa-distilbert-dot-v1',
 #               'multi-qa-distilbert-cos-v1']
 
-model_list = ['all-mpnet-base-v2']
+# model_list = ['all-mpnet-base-v2',
+#               'all-MiniLM-L12-v2',
+#               'all-mpnet-base-v1',
+#               'all-distilroberta-v1',
+#               'gtr-t5-large',
+#               'all-roberta-large-v1',
+#               'sentence-t5-large']
+
+model_list = ['sentence-t5-large']
 
 # Joint scales_raw
 data.scales_joint()
@@ -32,7 +40,7 @@ num_refs = len(data.list_names)
 # output = pd.DataFrame(output)
 # output['Q'] = data.list_names
 #
-# #ut.plot_PCA(output)
+# # ut.plot_PCA(output)
 # ut.plot_3D_PCA(output)
 
 # output = ut.TSNE_embeddings(data, model_list, 3)
@@ -43,23 +51,25 @@ num_refs = len(data.list_names)
 # #ut.plot_PCA(output)
 # ut.plot_3D_PCA(output)
 
+# Similarities loop
+distances_array_joint_raw = ut.similaraties(data, model_list, num_refs)
 
-# # Similarities loop
-# distances_array_joint_raw = ut.similaraties(data, model_list, num_refs)
-# #
-# # Create Raw DataFrame
-# df_Distances_joint_raw = pd.DataFrame(data=np.nanmean(distances_array_joint_raw, axis=0), columns=data.list_names,
-#                                       index=data.list_names).replace(np.nan,0)
-#
-# # Convert upper triangular DataFrame to symmetric
-# df_Distances_joint_raw = (df_Distances_joint_raw + df_Distances_joint_raw.T
-#                           - np.fill_diagonal(np.diag(np.diag(df_Distances_joint_raw)),1))
+# Create Raw DataFrame
+df_Distances_joint_raw = pd.DataFrame(data=np.nanmean(distances_array_joint_raw, axis=0), columns=data.list_names,
+                                      index=data.list_names).replace(np.nan,0)
 
-# # Plots
-# ut.plot_dendogram(df_Distances_joint_raw)
-#
+# Convert upper triangular DataFrame to symmetric
+df_Distances_joint_raw = (df_Distances_joint_raw + df_Distances_joint_raw.T).replace(0.0, 1.0)
+
+# Z-Score matrix
+# df_Distances_joint_raw = (( df_Distances_joint_raw - np.mean(np.mean(df_Distances_joint_raw)) )
+#                           /(np.std(np.std(df_Distances_joint_raw))))
+
+# Plots
+ut.plot_dendogram(df_Distances_joint_raw)
+
 # ut.plot_heatmap(df_Distances_joint_raw)
-#
+
 # ut.plot_node_degree(df_Distances_joint_raw)
 
 
