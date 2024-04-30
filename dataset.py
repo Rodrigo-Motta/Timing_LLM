@@ -31,5 +31,6 @@ class DatasetLoader:
             # Process all variables in the dictionary
             self.scales_preprocessed = {variable: remove_stopwords_lemmatize(string_list) for variable, string_list in self.scales_raw.items()}
 
-
-
+    def scales_joint(self):
+            self.scales_joint_raw = {variable: "".join(string_list).replace(".", ". ") for variable, string_list in
+                                self.scales_raw.items()}
