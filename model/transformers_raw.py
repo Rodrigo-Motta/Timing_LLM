@@ -29,15 +29,11 @@ data = DatasetLoader()
 
 #model_list = ['sentence-t5-large']
 #model_list = ['all-distilroberta-v1']
-#model_list = ['all-mpnet-base-v2']
-model_list = ['all-MiniLM-L6-v2']
-
-
-
+model_list = ['all-mpnet-base-v2']
+#model_list = ['all-MiniLM-L6-v2']
 
 # Joint scales_raw
 data.scales_joint()
-data.scramble_joint()
 
 # Setting variables
 num_refs = len(data.list_names)
@@ -73,15 +69,18 @@ df_Distances_joint_raw = (df_Distances_joint_raw + df_Distances_joint_raw.T).rep
 #                           /(np.std(np.std(df_Distances_joint_raw))))
 
 # Plots
-# ut.plot_dendogram(df_Distances_joint_raw)
+ut.plot_dendogram(df_Distances_joint_raw)
 
 # ut.plot_heatmap(df_Distances_joint_raw)
 
 #ut.plot_node_degree(df_Distances_joint_raw)
+#
+# df = ((df_Distances_joint_raw - df_Distances_joint_raw.mean().mean())/df_Distances_joint_raw.std().std())
+#
+# df = df - df.min().min()
+#
+# ut.plot_node_degree(df)
 
-df = ((df_Distances_joint_raw - df_Distances_joint_raw.mean().mean())/df_Distances_joint_raw.std().std())
+graph = ut.create_network(data, df_Distances_joint_raw)
 
-df = df - df.min().min()
-
-ut.plot_node_degree(df)
-
+ut.plot_chord(graph)

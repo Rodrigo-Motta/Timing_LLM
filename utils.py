@@ -8,6 +8,15 @@ from scipy.spatial.distance import squareform # squareform is used to convert a 
 from scipy.cluster.hierarchy import dendrogram, linkage
 import nltk, numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as sns
 from sentence_transformers import SentenceTransformer, util
+import networkx as nx
+import holoviews as hv
+import pandas as pd
+from bokeh.io import output_file, show
+import matplotlib.colors as colors
+import matplotlib.cm as cm
+from bokeh.models import LinearColorMapper
+
+
 
 # Function to remove stop words and lemmatize the words
 def remove_stopwords_lemmatize(string_list):
@@ -16,7 +25,7 @@ def remove_stopwords_lemmatize(string_list):
     return [' '.join(lemmatizer.lemmatize(word.lower()) for word in string.split() if word.lower() not in stop_words) for string in string_list]
 
 
-def similaraties(data,  model_list, num_refs):
+def similaraties(data,  model_list, num_refs,scrambled=False):
     # Initialize arrays
     distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_refs)) #(num_model, num_refs)
     distances_array_joint_raw[:] = np.nan
@@ -29,12 +38,13 @@ def similaraties(data,  model_list, num_refs):
         # Precompute embeddings for dataset with joint sentences
         # for iRef, Ref in enumerate(data.list_names):
         #     print(data.list_names[iRef])
+        if scrambled == True:
+            ref_embeddings_joint_raw = [model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=True) for
+                                        Ref in data.list_names]
 
-        ref_embeddings_joint_raw = [model.encode(data.scales_joint_raw[Ref], convert_to_tensor=True) for Ref in
-                                        data.list_names]
-
-        # ref_embeddings_joint_raw = [model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=True) for Ref in
-        #                                 data.list_names]
+        else:
+            ref_embeddings_joint_raw = [model.encode(data.scales_joint_raw[Ref], convert_to_tensor=True) for Ref in
+                                            data.list_names]
 
         # Calculate distances for dataset with joint sentences
         for iRef in range(num_refs):
@@ -224,3 +234,89 @@ def plot_3D_PCA(df):
 
     plt.tight_layout()
     plt.show()
+
+def create_network(data, df_Distances_joint_raw):
+    names = data.list_names
+    adjacency_matrix = df_Distances_joint_raw.values
+    # Initialize an empty graph
+    graph = nx.Graph()
+    # Add edges with weights from the adjacency matrix
+    num_nodes = len(adjacency_matrix)
+    for i in range(num_nodes):
+        for j in range(i + 1, num_nodes):
+            if adjacency_matrix[i][j] != 0:
+                graph.add_edge(names[i], names[j], weight=adjacency_matrix[i][j])
+
+    return graph
+
+
+def plot_chord(graph):
+    hv.extension("bokeh")
+
+    adjacency_matrix = nx.adjacency_matrix(graph).todense()
+    names = list(graph.nodes())
+    # Create a data structure suitable for a chord diagram
+    edges = []
+    num_nodes = len(adjacency_matrix)
+    for i in range(num_nodes):
+        for j in range(i + 1, num_nodes):
+            weight = adjacency_matrix[i][j]
+            if weight != 0:
+                edges.append((names[i], names[j], weight))
+
+    # Convert to DataFrame for manipulation and normalization
+    edges_df = pd.DataFrame(edges, columns=["source", "target", "value"])
+
+    # Calculate node degrees (number of links per node)
+    degrees = dict(graph.degree(names, weight='weight'))
+
+    # Normalize degrees and create a colormap using 'Blues'
+    norm = colors.Normalize(vmin=min(degrees.values()), vmax=max(degrees.values()))
+    colormap = cm.ScalarMappable(norm=norm, cmap='Blues')
+
+    # Apply color mapping to each node
+    color_df = pd.DataFrame({'index': names, 'color': [colormap.to_rgba(degrees[name]) for name in names]})
+
+    # Convert RGBA colors to hex values
+    color_df['color'] = color_df['color'].apply(lambda rgba: colors.to_hex(rgba))
+
+    edges_df['color'] = edges_df.merge(color_df, how='inner', left_on='source', right_on='index')['color']
+
+    cmap = colors.ListedColormap(color_df['color'].values)
+
+    # Calculate the average weight
+    average_weight = edges_df['value'].mean() + 1.5 * edges_df['value'].std()
+
+    # Filter edges above the average weight
+    edges_df.loc[edges_df['value'] < average_weight, 'value'] = 0.0001
+
+    min_weight = edges_df['value'].min()
+    max_weight = edges_df['value'].max()
+    edges_df['line_width'] = (edges_df['value'] - min_weight) / (max_weight - min_weight) * 10
+
+    # Combine nodes and filtered edges
+    chord = hv.Chord(edges_df)
+    chord.opts(
+        labels='index',
+        node_color='index',
+        edge_color='color',
+        node_cmap=cmap,
+        edge_cmap=cmap,
+        edge_line_width=hv.dim('value'),  # line_width
+        width=1000, height=1000
+    )
+
+    # chord = hv.Chord(edges_df)
+    # chord.opts(
+    #     labels='index',
+    #     node_color='index',
+    #     edge_color=hv.dim('source').str(),
+    #     node_cmap='Category20',
+    #     edge_cmap=cmap,
+    #     edge_line_width=hv.dim('value'),  # line_width
+    #     width=1000, height=1000
+    # )
+
+    # Display the chord diagram
+    output_file("chord_diagram.html")
+    show(hv.render(chord, backend='bokeh'))
