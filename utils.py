@@ -29,8 +29,12 @@ def similaraties(data,  model_list, num_refs):
         # Precompute embeddings for dataset with joint sentences
         # for iRef, Ref in enumerate(data.list_names):
         #     print(data.list_names[iRef])
+
         ref_embeddings_joint_raw = [model.encode(data.scales_joint_raw[Ref], convert_to_tensor=True) for Ref in
                                         data.list_names]
+
+        # ref_embeddings_joint_raw = [model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=True) for Ref in
+        #                                 data.list_names]
 
         # Calculate distances for dataset with joint sentences
         for iRef in range(num_refs):
@@ -41,6 +45,7 @@ def similaraties(data,  model_list, num_refs):
                 list_2 = ref_embeddings_joint_raw[iComp]
 
                 dists = util.pytorch_cos_sim(list_1, list_2)
+                dists = util.dot_score(list_1, list_2)
 
                 distances_array_joint_raw[iModel, iRef, iComp] = dists
     return distances_array_joint_raw
@@ -92,6 +97,17 @@ def TSNE_embeddings(data,  model_list, n_comp):
                           init = 'random', perplexity = 15, n_iter=300).fit_transform(ref_embeddings_joint_raw)
 
     return X_embedded
+
+def remove_triangle(df):
+    # Remove triangle of a symmetric matrix and the diagonal
+
+    df = df.astype(float)
+    df.values[np.triu_indices_from(df, k=1)] = np.nan
+    df = ((df.T).values.reshape((1, (df.shape[0]) ** 2)))
+    df = df[~np.isnan(df)]
+    df = df[df != 1]
+    return (df).reshape((1, len(df)))
+
 
 def plot_dendogram(df_Distances_joint_raw):
     # Find the row and column labels for the maximum value with stopwords
@@ -173,6 +189,8 @@ def plot_PCA(df):
     plt.xlabel('PC_0')
     # Set y-axis label
     plt.ylabel('PC_1')
+    plt.xlim(-.6,.6)
+    plt.ylim(-.6,.6)
     plt.tight_layout()
     plt.show()
 
@@ -200,6 +218,9 @@ def plot_3D_PCA(df):
     ax.set_xlabel('PC_0')
     ax.set_ylabel('PC_1')
     ax.set_zlabel('PC_2')
+    ax.set_xlim(-.3,.3)
+    ax.set_ylim(-.3,.3)
+    ax.set_zlim(-.3,.3)
 
     plt.tight_layout()
     plt.show()
