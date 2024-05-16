@@ -14,16 +14,13 @@ import pandas as pd
 from bokeh.io import output_file, show
 import matplotlib.colors as colors
 import matplotlib.cm as cm
-from bokeh.models import LinearColorMapper
-
-
+import community as community_louvain
 
 # Function to remove stop words and lemmatize the words
 def remove_stopwords_lemmatize(string_list):
     stop_words = set(stopwords.words('english'))
     lemmatizer = WordNetLemmatizer()
     return [' '.join(lemmatizer.lemmatize(word.lower()) for word in string.split() if word.lower() not in stop_words) for string in string_list]
-
 
 def similaraties(data,  model_list, num_refs,scrambled=False):
     # Initialize arrays
@@ -235,6 +232,44 @@ def plot_3D_PCA(df):
     plt.tight_layout()
     plt.show()
 
+def plot_3D_PCA_controls(df):
+    # Define the points that you want to highlight
+    highlight_points = ['DASS', 'RESS']
+    df['color'] = df.index.where(df['Q'].isin(highlight_points), 'Other')
+
+    # Creating a 3D scatter plot
+    fig = plt.figure(figsize=(15, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Plot all non-highlighted points using a single color
+    other_points = df[df['color'] == 'Other']
+    ax.scatter(other_points.iloc[:, 0], other_points.iloc[:, 1], other_points.iloc[:, 2],
+               s=100, c='grey', label='Other', alpha=0.6)
+
+    # Highlight the specific points (DASS and RESS)
+    highlighted_points = df[df['color'] != 'Other']
+    ax.scatter(highlighted_points.iloc[:, 0], highlighted_points.iloc[:, 1], highlighted_points.iloc[:, 2],
+               s=150, c='red', label='Controls', alpha=0.8)
+
+    df = df[(df.Q == 'RESS') | (df.Q == 'DASS')].reset_index().drop(columns='index')
+    for line in range(0, df.shape[0]):
+        ax.text(df.iloc[line, 0] + 0.05, df.iloc[line, 1], df.iloc[line, 2], df['Q'][line],
+        horizontalalignment = 'left', size = 'small', color = 'black', weight = 'bold')
+
+    # Titles and labels
+    plt.title('3D PCA Embedding')
+    ax.set_xlabel('PC_0')
+    ax.set_ylabel('PC_1')
+    ax.set_zlabel('PC_2')
+    #ax.set_xlim(3*-0.3, 3*0.3)
+    #ax.set_ylim(3*-0.3, 3*0.3)
+    #ax.set_zlim(3*-0.3, 3*0.3)
+
+    # Legend
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
+
 def create_network(data, df_Distances_joint_raw):
     names = data.list_names
     adjacency_matrix = df_Distances_joint_raw.values
@@ -248,7 +283,6 @@ def create_network(data, df_Distances_joint_raw):
                 graph.add_edge(names[i], names[j], weight=adjacency_matrix[i][j])
 
     return graph
-
 
 def plot_chord(graph):
     hv.extension("bokeh")
@@ -320,3 +354,144 @@ def plot_chord(graph):
     # Display the chord diagram
     output_file("chord_diagram.html")
     show(hv.render(chord, backend='bokeh'))
+
+def invert_weights(graph, max_weight=None):
+    new_graph = nx.Graph()
+
+    if max_weight is None:
+        max_weight = max(data['weight'] for u, v, data in graph.edges(data=True))
+
+    for u, v, data in graph.edges(data=True):
+        # Inverting weights so higher weight becomes less costly
+        new_weight = max_weight - data['weight']
+        new_graph.add_edge(u, v, weight=new_weight)
+
+    return new_graph
+
+def shortest_path(graph):
+    # Calculate all pairs' shortest path distances using weights
+    shortest_paths = dict(nx.all_pairs_dijkstra_path_length(graph, weight='weight'))
+
+    # Calculate the weighted average path length
+    if nx.is_connected(graph):
+        avg_path_length = nx.average_shortest_path_length(graph, weight='weight')
+    else:
+        avg_path_length = "Graph is not connected, cannot calculate average path length."
+
+    # Calculate eccentricity
+    eccentricity = nx.eccentricity(graph, sp=shortest_paths)
+
+    # Calculate diameter
+    diameter = nx.diameter(graph, e=eccentricity)
+
+    print("Shortest Paths (all pairs):", shortest_paths)
+    print("Average Path Length (weighted):", avg_path_length)
+    print("Eccentricity (weighted):", eccentricity)
+    print("Diameter (weighted):", diameter)
+    graph_prop = {
+    "Shortest Paths (all pairs)" : shortest_paths,
+    "Average Path Length (weighted)" : avg_path_length,
+    "Eccentricity (weighted)" : eccentricity,
+    "Diameter (weighted)" : diameter,
+    }
+    return graph_prop
+
+def graph_properties(graph):
+    # Assume the graph is already loaded or created
+    # `graph` is a NetworkX graph where the edge weights represent semantic similarity
+
+    # Weighted Degree (Strength)
+    weighted_degrees = dict(graph.degree(weight='weight'))
+
+    # Weighted Clustering Coefficient
+    weighted_clustering_coefficients = nx.clustering(graph, weight='weight')
+
+    # Weighted Betweenness Centrality
+    weighted_betweenness = nx.betweenness_centrality(graph, weight='weight')
+
+    # Weighted Closeness Centrality
+    weighted_closeness = nx.closeness_centrality(graph, distance='weight')
+
+    # Weighted Modularity (Community Detection via Louvain method)
+    partition = community_louvain.best_partition(graph, weight='weight')
+
+    # Weighted Eigenvector Centrality
+    weighted_eigenvector = nx.eigenvector_centrality(graph, weight='weight')
+
+    # Combine individual properties into a DataFrame
+    df = pd.DataFrame({
+        'Weighted Degree': weighted_degrees,
+        'Weighted Clustering Coefficient': weighted_clustering_coefficients,
+        'Weighted Betweenness Centrality': weighted_betweenness,
+        'Weighted Closeness Centrality': weighted_closeness,
+        'Community (Partition)': partition,
+        'Weighted Eigenvector Centrality': weighted_eigenvector
+    })
+
+    # Adding global metrics that are not node-specific
+    total_weight = sum(data['weight'] for u, v, data in graph.edges(data=True))
+    num_possible_edges = len(graph) * (len(graph) - 1) / 2
+    weighted_density = total_weight / num_possible_edges
+    weight_correlations = nx.degree_pearson_correlation_coefficient(graph, weight='weight')
+
+    global_metrics = {
+        'Average Weighted Degree': sum(weighted_degrees.values()) / len(graph),
+        'Weighted Density': weighted_density,
+        'Assortativity (Weight Correlation)': weight_correlations
+    }
+
+    # Display the DataFrame and global metrics
+    print("Node-Specific Properties DataFrame:")
+    print(df)
+
+    print("\nGlobal Metrics:")
+    for name, value in global_metrics.items():
+        print(f"{name}: {value}")
+
+    return df, global_metrics
+
+def plot_dendrogram_and_heatmap(df_Distances_joint_raw):
+    from scipy.cluster.hierarchy import linkage, fcluster
+
+    df_Distances_joint_raw = df_Distances_joint_raw.fillna(0)
+
+    Similarities = df_Distances_joint_raw.values
+    Distances = 1-Similarities # converting similarity values into dissimilarity values.
+    np.fill_diagonal(Distances, 0)
+    Distances = squareform(Distances)
+
+    Z = linkage(Distances, method = 'average') # the method can be single, complete or average
+
+    # print(Z)
+    # Assign clusters using the flat cluster method
+    clusters = fcluster(Z, 3, criterion='maxclust')
+
+    # Create a mapping from clusters to colors
+    unique_clusters = np.unique(clusters)
+    colors = sns.color_palette("Set2", len(unique_clusters))
+    lut = dict(zip(unique_clusters, colors))
+    row_colors = (clusters).map(lut)
+
+    # Create a cluster map with seaborn
+    g = sns.clustermap(
+        df_Distances_joint_raw,
+        metric='euclidean',  # You can also use 'correlation' or other distance metrics
+        method='average',  # Clustering method: 'single', 'complete', 'average', etc.
+        cmap='coolwarm',  # Color scheme for the heatmap
+        figsize=(12, 8),
+        annot=False,  # Set to True to display the values in the cells
+        cbar_kws={'label': 'Similarity Score'},  # Customize the color bar
+        xticklabels=True,
+        yticklabels=True,
+        col_cluster=False,
+        row_colors=row_colors,
+        dendrogram_ratio=(.1, .2)
+    )
+
+    # Customize the plot with title, etc.
+    g.fig.suptitle('Aligned Dendrogram and Heatmap', fontsize=16)
+    g.ax_heatmap.set_xlabel('Questionnaires', fontsize=12)
+    g.ax_heatmap.set_ylabel('Questionnaires', fontsize=12)
+
+    # Show the plot
+    plt.show()

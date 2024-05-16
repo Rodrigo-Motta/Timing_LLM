@@ -27,9 +27,9 @@ data = DatasetLoader()
 #               'all-roberta-large-v1',
 #               'sentence-t5-large']
 
-#model_list = ['sentence-t5-large']
+model_list = ['sentence-t5-large']
 #model_list = ['all-distilroberta-v1']
-model_list = ['all-mpnet-base-v2']
+#model_list = ['all-mpnet-base-v2']
 #model_list = ['all-MiniLM-L6-v2']
 
 # Joint scales_raw
@@ -37,14 +37,11 @@ data.scales_joint()
 
 # Setting variables
 num_refs = len(data.list_names)
-#
+
 # output = ut.PCA_embeddings(data,model_list,3)
 #
 # output = pd.DataFrame(output)
 # output['Q'] = data.list_names
-#
-# # ut.plot_PCA(output)
-# ut.plot_3D_PCA(output)
 
 # output = ut.TSNE_embeddings(data, model_list, 3)
 #
@@ -53,23 +50,25 @@ num_refs = len(data.list_names)
 #
 # #ut.plot_PCA(output)
 # ut.plot_3D_PCA(output)
+#ut.plot_3D_PCA_controls(output)
 
-# Similarities loop
+## Similarities loop
 distances_array_joint_raw = ut.similaraties(data, model_list, num_refs)
 
-# Create Raw DataFrame
+## Create Raw DataFrame
 df_Distances_joint_raw = pd.DataFrame(data=np.nanmean(distances_array_joint_raw, axis=0), columns=data.list_names,
                                       index=data.list_names).replace(np.nan,0)
 
-# Convert upper triangular DataFrame to symmetric
+## Convert upper triangular DataFrame to symmetric
 df_Distances_joint_raw = (df_Distances_joint_raw + df_Distances_joint_raw.T).replace(0.0, 1.0)
 
-# Z-Score matrix
-# df_Distances_joint_raw = (( df_Distances_joint_raw - np.mean(np.mean(df_Distances_joint_raw)) )
+## Z-Score matrix
+#df_Distances_joint_raw = (( df_Distances_joint_raw - np.mean(np.mean(df_Distances_joint_raw)) )
 #                           /(np.std(np.std(df_Distances_joint_raw))))
 
-# Plots
+## Plots
 ut.plot_dendogram(df_Distances_joint_raw)
+#ut.plot_dendrogram_and_heatmap(df_Distances_joint_raw)
 
 # ut.plot_heatmap(df_Distances_joint_raw)
 
@@ -81,6 +80,12 @@ ut.plot_dendogram(df_Distances_joint_raw)
 #
 # ut.plot_node_degree(df)
 
-graph = ut.create_network(data, df_Distances_joint_raw)
-
-ut.plot_chord(graph)
+# graph = ut.create_network(data, df_Distances_joint_raw)
+#
+# graph_properties, global_metrics = ut.graph_properties(graph)
+#
+# inverted_graph = ut.invert_weights(graph)
+#
+# graph_lenght = ut.shortest_path(inverted_graph)
+#
+# ut.plot_chord(graph)
