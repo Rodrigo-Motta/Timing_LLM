@@ -59,7 +59,7 @@ num_refs = len(data.list_names)
 # ut.plot_3D_PCA(output)
 
 # Similarities loop
-distances_array_joint_raw = ut.similaraties(data, model_list, num_refs,scrambled=False)
+distances_array_joint_raw = ut.similaraties(data, model_list, num_refs,scrambled=True)
 
 # Create Raw DataFrame
 df_Distances_joint_raw = pd.DataFrame(data=np.nanmean(distances_array_joint_raw, axis=0), columns=data.list_names,
