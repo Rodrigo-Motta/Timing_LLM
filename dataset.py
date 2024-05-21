@@ -10,6 +10,7 @@ import nltk, numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as sns
 from utils import remove_stopwords_lemmatize
 # Here we import the scales we will use
 import scales_time
+import eiko_depression_scales
 from scales_time import *
 import random
 

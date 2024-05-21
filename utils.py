@@ -15,6 +15,7 @@ from bokeh.io import output_file, show
 import matplotlib.colors as colors
 import matplotlib.cm as cm
 import community as community_louvain
+from sklearn.cluster import KMeans
 
 # Function to remove stop words and lemmatize the words
 def remove_stopwords_lemmatize(string_list):
@@ -57,7 +58,58 @@ def similaraties(data,  model_list, num_refs,scrambled=False):
                 distances_array_joint_raw[iModel, iRef, iComp] = dists
     return distances_array_joint_raw
 
-def PCA_embeddings(data,  model_list, n_comp):
+def similaraties_average(data,  model_list, num_refs, num_scrambles):
+    N = num_scrambles
+
+    # Initialize arrays
+    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_refs)) #(num_model, num_refs)
+    distances_array_joint_raw[:] = np.nan
+
+    # Loop over models
+    for iModel, Model in enumerate(model_list):
+        print(Model)
+        model = SentenceTransformer(Model)
+        all_dist = np.zeros((len(model_list), N, num_refs, num_refs))
+        for n in range(N):
+            # Precompute embeddings for dataset with joint sentences
+            data.scramble_joint()
+            ref_embeddings_joint_raw = [model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=True) for
+                                            Ref in data.list_names]
+
+            # Calculate distances for dataset with joint sentences
+            for iRef in range(num_refs):
+                list_1 = ref_embeddings_joint_raw[iRef]
+
+                for iComp in range(iRef + 1, num_refs):
+                    Comp = data.list_names[iComp]
+                    list_2 = ref_embeddings_joint_raw[iComp]
+
+                    dists = util.pytorch_cos_sim(list_1, list_2)
+                    dists = util.dot_score(list_1, list_2)
+
+                    distances_array_joint_raw[iModel, iRef, iComp] = dists
+
+            all_dist[iModel, n, :, :] = distances_array_joint_raw[0, :, :]
+
+    average_dist = all_dist.mean(axis=1)
+    std_dist = all_dist.std(axis=1)
+
+    return average_dist, std_dist
+
+def convert_arr_to_pandas(distances_array_joint_raw, data):
+    ## Create Raw DataFrame
+    df = pd.DataFrame(data=np.nanmean(distances_array_joint_raw, axis=0), columns=data.list_names,
+                 index=data.list_names).replace(np.nan,0)
+    ## Convert upper triangular DataFrame to symmetric
+    df = (df + df.T).replace(0.0, 1.0)
+
+    return df
+
+def min_max_norm(df):
+    df = ((df - df.min().min()) / (df.max().max() - df.min().min()))
+    return df
+
+def PCA_embeddings(data,  model_list, n_comp, scramble=False):
     import numpy as np
     from sklearn.decomposition import PCA
 
@@ -69,19 +121,18 @@ def PCA_embeddings(data,  model_list, n_comp):
         model = SentenceTransformer(Model)
 
         # Precompute embeddings for dataset with joint sentences
-        # for iRef, Ref in enumerate(data.list_names):
-        #     print(data.list_names[iRef])
-        ref_embeddings_joint_raw = np.array([model.encode(data.scales_joint_raw[Ref], convert_to_tensor=False) for Ref in
-                                        data.list_names])
-        print(ref_embeddings_joint_raw.shape)
+        if scramble == False:
+            ref_embeddings_joint_raw = np.array([model.encode(data.scales_joint_raw[Ref], convert_to_tensor=False) for Ref in
+                                            data.list_names])
+        else:
+            ref_embeddings_joint_raw = np.array([model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=False) for Ref in
+                 data.list_names])
+
         pca = PCA(n_components=n_comp)
         pca.fit(ref_embeddings_joint_raw)
-        PCA(n_components=2)
-        print(pca.explained_variance_ratio_)
-        print(pca.singular_values_)
         X_pca = pca.fit_transform(ref_embeddings_joint_raw)
 
-    return X_pca
+    return X_pca, pca.explained_variance_ratio_
 
 def TSNE_embeddings(data,  model_list, n_comp):
     import numpy as np
@@ -114,7 +165,6 @@ def remove_triangle(df):
     df = df[~np.isnan(df)]
     df = df[df != 1]
     return (df).reshape((1, len(df)))
-
 
 def plot_dendogram(df_Distances_joint_raw):
     # Find the row and column labels for the maximum value with stopwords
@@ -171,10 +221,11 @@ def plot_node_degree(df_Distances_joint_raw):
     plt.tight_layout()
     plt.show()
 
-def plot_PCA(df):
-    from sklearn.cluster import KMeans
+def plot_PCA(arr, list_names, clusters):
+    df = pd.DataFrame(arr)
+    df['Names'] = list_names
 
-    kmeans = KMeans(n_clusters=8).fit(df.iloc[:,[0,1]])
+    kmeans = KMeans(n_clusters=clusters).fit(df.iloc[:,[0,1]])
     df['cluster'] = pd.Categorical(kmeans.labels_)
 
     plt.figure(figsize=(8,8))
@@ -188,7 +239,7 @@ def plot_PCA(df):
 
     for line in range(0, df.shape[0]):
         p1.text(df.iloc[line, 0] + 0.01, df.iloc[line, 1],
-                df.Q[line], horizontalalignment='left',
+                df.Names[line], horizontalalignment='left',
                 size='small', color='black', weight='normal')
 
     plt.title('Embedding')
@@ -201,10 +252,11 @@ def plot_PCA(df):
     plt.tight_layout()
     plt.show()
 
-def plot_3D_PCA(df):
-    from sklearn.cluster import KMeans
+def plot_3D_PCA(arr, list_names, clusters):
+    df = pd.DataFrame(arr)
+    df['Names'] = list_names
 
-    kmeans = KMeans(n_clusters=5).fit(df.iloc[:, [0, 1, 2]])
+    kmeans = KMeans(n_clusters=clusters).fit(df.iloc[:, :-1])
     df['cluster'] = pd.Categorical(kmeans.labels_)
 
     # Creating a 3D scatter plot
@@ -217,7 +269,7 @@ def plot_3D_PCA(df):
 
     # Adding annotations to each point
     for line in range(0, df.shape[0]):
-        ax.text(df.iloc[line, 0], df.iloc[line, 1], df.iloc[line, 2], df['Q'][line],
+        ax.text(df.iloc[line, 0], df.iloc[line, 1], df.iloc[line, 2], df['Names'][line],
                 horizontalalignment='left', size='small', color='black', weight='normal')
 
     # Titles and labels
@@ -232,7 +284,17 @@ def plot_3D_PCA(df):
     plt.tight_layout()
     plt.show()
 
-def plot_3D_PCA_controls(df):
+def PCA_Kmeans_clusters(arr, list_names, clusters):
+    df = pd.DataFrame(arr)
+    df['Names'] = list_names
+
+    kmeans = KMeans(n_clusters=clusters).fit(df.iloc[:, :-1])
+    df['cluster'] = pd.Categorical(kmeans.labels_)
+    return df
+
+def plot_3D_PCA_controls(arr, list_names):
+    df = pd.DataFrame(arr)
+    df['Names'] = list_names
     # Define the points that you want to highlight
     highlight_points = ['DASS', 'RESS']
     df['color'] = df.index.where(df['Q'].isin(highlight_points), 'Other')
