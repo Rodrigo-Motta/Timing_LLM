@@ -8,7 +8,6 @@ import utils as ut
 
 data = DatasetLoader()
 
-
 #model_list = ['sentence-t5-large']
 #model_list = ['all-distilroberta-v1']
 model_list = ['all-mpnet-base-v2']
@@ -21,26 +20,33 @@ data.scramble_joint()
 # Setting variables
 num_refs = len(data.list_names)
 
+N = 30
+output = np.zeros((len(data.list_names), N))
+for scrambles in range(10):
+    data.scramble_joint()
+    aux,variance = ut.PCA_embeddings(data,model_list,n_comp=N, scramble=True)
+    output += aux
 
-# output = ut.PCA_embeddings(data,model_list,3, scramble=True)
+output = output/10
 
 # ut.plot_PCA(output, data.list_names, clusters=5)
-# ut.plot_3D_PCA(output, data.list_names, clusters=5)
+ut.plot_3D_PCA(output, data.list_names, clusters=5)
 # ut.plot_3D_PCA_controls(output)
 
 # output = ut.TSNE_embeddings(data, model_list, 3)
 
 # Repetitions
-average_dist, std_dist = ut.similaraties_average(data, model_list, num_refs, num_scrambles=10)
+#average_dist, std_dist = ut.similaraties_average(data, model_list, num_refs, num_scrambles=10)
 
 # Create Raw DataFrame
-df_Distances_joint_raw = ut.convert_arr_to_pandas(average_dist, data)
+#df_Distances_joint_raw = ut.convert_arr_to_pandas(average_dist, data)
 
-df_Distances_joint_raw = ut.min_max_norm(df_Distances_joint_raw)
+# Min Max Scaler
+#df_Distances_joint_raw = ut.min_max_norm(df_Distances_joint_raw)
 
 # Plots
-ut.plot_dendogram(df_Distances_joint_raw)
+#ut.plot_dendogram(df_Distances_joint_raw)
 
-# ut.plot_heatmap(df_Distances_joint_raw)
+#ut.plot_heatmap(df_Distances_joint_raw.replace(1.0 ,np.nan))
 
 #ut.plot_node_degree(df_Distances_joint_raw)
