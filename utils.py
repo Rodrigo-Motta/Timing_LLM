@@ -23,7 +23,37 @@ def remove_stopwords_lemmatize(string_list):
     lemmatizer = WordNetLemmatizer()
     return [' '.join(lemmatizer.lemmatize(word.lower()) for word in string.split() if word.lower() not in stop_words) for string in string_list]
 
-def similaraties(data,  model_list, num_refs,scrambled=False):
+def intra_similaraties(data, model_list, num_refs, num_scrambles):
+    # Initialize arrays
+    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))  # (num_model, num_refs)
+    distances_array_joint_raw[:] = np.nan
+
+    # Loop over models
+    for iModel, Model in enumerate(model_list):
+        print(Model)
+        model = SentenceTransformer(Model)
+
+        # Precompute embeddings for dataset with joint sentences
+        for iRef, Ref in enumerate(data.list_names):
+            embed_list = []
+            for scrambles in range(num_scrambles):
+                data.scramble_joint()
+                embeddings = [model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=True)]
+                embed_list.append(embeddings)
+
+            # Calculate distances for dataset with joint sentences
+            for i in range(num_scrambles):
+                list_1 = embed_list[i][0]
+
+                for j in range(i, num_scrambles):
+                    list_2 = embed_list[j][0]
+                    dists = util.pytorch_cos_sim(list_1, list_2)
+                    #dists = util.dot_score(list_1, list_2)
+                    distances_array_joint_raw[iModel, iRef, i, j] = dists
+
+    return distances_array_joint_raw
+
+def similaraties(data,  model_list, num_refs, scrambled=False):
     # Initialize arrays
     distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_refs)) #(num_model, num_refs)
     distances_array_joint_raw[:] = np.nan
@@ -96,6 +126,36 @@ def similaraties_average(data,  model_list, num_refs, num_scrambles):
 
     return average_dist, std_dist
 
+def get_embedding(data, model_list, num_refs, num_scrambles):
+    # Initialize arrays
+    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))  # (num_model, num_refs)
+    distances_array_joint_raw[:] = np.nan
+
+    # Loop over models
+    for iModel, Model in enumerate(model_list):
+        print(Model)
+        embed_list = []
+        model = SentenceTransformer(Model)
+
+        # Precompute embeddings for dataset with joint sentences
+        for iRef, Ref in enumerate(data.list_names):
+            aux = []
+            for scrambles in range(num_scrambles):
+                data.scramble_joint()
+                embeddings = [model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=False)]
+                aux.append(embeddings)
+            embed_list.append(np.array(aux).mean(axis=0))
+
+    return np.array(embed_list)
+
+def clusters(embed_arr, data, clusters):
+    df = pd.DataFrame(np.array(embed_arr))
+    df['Names'] = data.list_names
+
+    kmeans = KMeans(n_clusters=clusters,init='k-means++', max_iter=300, n_init=10).fit(df.iloc[:, :-1])
+    df['cluster'] = pd.Categorical(kmeans.labels_)
+    return df
+
 def convert_arr_to_pandas(distances_array_joint_raw, data):
     ## Create Raw DataFrame
     df = pd.DataFrame(data=np.nanmean(distances_array_joint_raw, axis=0), columns=data.list_names,
@@ -109,28 +169,13 @@ def min_max_norm(df):
     df = ((df - df.min().min()) / (df.max().max() - df.min().min()))
     return df
 
-def PCA_embeddings(data,  model_list, n_comp, scramble=False):
+def PCA_embeddings(arr, n_comp):
     import numpy as np
     from sklearn.decomposition import PCA
 
-    # Initialize arrays
-
-    # Loop over models
-    for iModel, Model in enumerate(model_list):
-        print(Model)
-        model = SentenceTransformer(Model)
-
-        # Precompute embeddings for dataset with joint sentences
-        if scramble == False:
-            ref_embeddings_joint_raw = np.array([model.encode(data.scales_joint_raw[Ref], convert_to_tensor=False) for Ref in
-                                            data.list_names])
-        else:
-            ref_embeddings_joint_raw = np.array([model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=False) for Ref in
-                 data.list_names])
-
-        pca = PCA(n_components=n_comp)
-        pca.fit(ref_embeddings_joint_raw)
-        X_pca = pca.fit_transform(ref_embeddings_joint_raw)
+    pca = PCA(n_components=n_comp)
+    pca.fit(arr)
+    X_pca = pca.fit_transform(arr)
 
     return X_pca, pca.explained_variance_ratio_
 
@@ -165,6 +210,48 @@ def remove_triangle(df):
     df = df[~np.isnan(df)]
     df = df[df != 1]
     return (df).reshape((1, len(df)))
+
+def summarize(data, model_list, num_refs):
+    import torch
+    from transformers import AutoTokenizer, AutoModelWithLMHead
+
+    tokenizer = AutoTokenizer.from_pretrained('T5-base')
+    model = AutoModelWithLMHead.from_pretrained('T5-base', return_dict=True)
+    for iRef, Ref in enumerate(data.list_names):
+        print(Ref)
+        text = (data.scales_joint_raw[Ref])
+        # Replace the special characters with the correct quotation marks
+        text = text.replace("?", '"').replace("?", "'")
+
+        # Remove the extra spaces and newlines
+        text = text.strip().replace("\n", " ")
+
+        # Add a period at the end of the text if it is missing
+        if not text.endswith("."):
+            text = text + "."
+
+        t5_prepared_Text = "summarize in one word: " + text
+        tokenized_text = tokenizer.encode(t5_prepared_Text, return_tensors="pt")
+        summary_ids = model.generate(tokenized_text,
+                                     num_beams=4,
+                                     no_repeat_ngram_size=3,
+                                     min_length=1,
+                                     max_length=3,
+                                     length_penalty=2.0,
+                                     temperature=0.8)
+        output = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+        print(output)
+
+
+############### PLOTS #####################
+def plot_intra_barplot(arr, data):
+    mean = np.nanmean(np.nanmean(arr[0], axis=-1), axis=-1)
+    error = np.nanstd(np.nanstd(arr[0], axis=-1), axis=-1)
+    plt.bar(x=data.list_names, height=mean, yerr=error)
+    plt.xticks(ticks=range(len(data.list_names)), labels=data.list_names, rotation=90)
+    plt.tight_layout()
+    plt.ylabel('Cosine Distance')
+    plt.show()
 
 def plot_dendogram(df_Distances_joint_raw):
     # Find the row and column labels for the maximum value with stopwords
@@ -221,12 +308,11 @@ def plot_node_degree(df_Distances_joint_raw):
     plt.tight_layout()
     plt.show()
 
-def plot_PCA(arr, list_names, clusters):
+def plot_PCA_embeddings(arr, list_names, clusters):
     df = pd.DataFrame(arr)
     df['Names'] = list_names
 
-    kmeans = KMeans(n_clusters=clusters).fit(df.iloc[:,[0,1]])
-    df['cluster'] = pd.Categorical(kmeans.labels_)
+    df['cluster'] = clusters
 
     plt.figure(figsize=(8,8))
 
@@ -256,8 +342,7 @@ def plot_3D_PCA(arr, list_names, clusters):
     df = pd.DataFrame(arr)
     df['Names'] = list_names
 
-    kmeans = KMeans(n_clusters=clusters).fit(df.iloc[:, :-1])
-    df['cluster'] = pd.Categorical(kmeans.labels_)
+    df['cluster'] = clusters
 
     # Creating a 3D scatter plot
     fig = plt.figure(figsize=(15, 8))

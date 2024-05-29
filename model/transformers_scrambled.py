@@ -8,9 +8,9 @@ import utils as ut
 
 data = DatasetLoader()
 
-#model_list = ['sentence-t5-large']
+model_list = ['sentence-t5-large']
 #model_list = ['all-distilroberta-v1']
-model_list = ['all-mpnet-base-v2']
+#model_list = ['all-mpnet-base-v2']
 #model_list = ['all-MiniLM-L6-v2']
 
 # Joint scales_raw
@@ -20,20 +20,23 @@ data.scramble_joint()
 # Setting variables
 num_refs = len(data.list_names)
 
-N = 30
-output = np.zeros((len(data.list_names), N))
-for scrambles in range(10):
-    data.scramble_joint()
-    aux,variance = ut.PCA_embeddings(data,model_list,n_comp=N, scramble=True)
-    output += aux
+# Summarize
+ut.summarize(data, model_list, num_refs)
 
-output = output/10
+# Intra-Questionneire variance
 
-# ut.plot_PCA(output, data.list_names, clusters=5)
-ut.plot_3D_PCA(output, data.list_names, clusters=5)
-# ut.plot_3D_PCA_controls(output)
+#arr = ut.intra_similaraties(data, model_list, num_refs, num_scrambles=50)
+#ut.plot_intra_barplot(arr, data)
 
-# output = ut.TSNE_embeddings(data, model_list, 3)
+# Clusters information and plot
+
+# arr = ut.get_embedding(data, model_list, num_refs, num_scrambles=5)
+# model = 0
+# comps, variance = ut.PCA_embeddings(arr[:,model,:], n_comp=10)
+# df = ut.clusters(arr[:, model,:], data, clusters=3)
+# ut.plot_3D_PCA(comps, data.list_names, df['cluster'].values)
+
+
 
 # Repetitions
 #average_dist, std_dist = ut.similaraties_average(data, model_list, num_refs, num_scrambles=10)
