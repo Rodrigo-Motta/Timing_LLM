@@ -148,6 +148,24 @@ def get_embedding(data, model_list, num_refs, num_scrambles):
 
     return np.array(embed_list)
 
+def hierarquical_clustering(embed_arr,data):
+    # Step 4: Hierarchical Clustering
+    linked = linkage(embed_arr, method='average', metric='cosine')
+
+    # Step 5: Visualization of the dendrogram
+    plt.figure(figsize=(12, 6))
+    dendrogram(linked,
+               orientation='top',
+               labels=data.list_names,
+               distance_sort='descending',
+               show_leaf_counts=True)
+    plt.xlabel('Concepts')
+    plt.ylabel('Cosine distances')
+    plt.title('Hierarchical Clustering Dendrogram')
+    plt.tight_layout()
+    plt.show()
+    return linked
+
 def clusters(embed_arr, data, clusters):
     df = pd.DataFrame(np.array(embed_arr))
     df['Names'] = data.list_names
@@ -295,15 +313,15 @@ def plot_dendogram(df_Distances_joint_raw):
     plt.tight_layout()
     plt.show()
 
-def plot_heatmap(df_Distances_joint_raw):
+def plot_heatmap(df):
     plt.figure(figsize=(8,8))
-    sns.heatmap(df_Distances_joint_raw)
+    sns.heatmap(df, annot = True)
     plt.tight_layout()
     plt.show()
 
-def plot_node_degree(df_Distances_joint_raw):
+def plot_node_degree(df):
     plt.figure(figsize=(15,5))
-    sns.barplot(df_Distances_joint_raw.mean(axis=0).sort_values())
+    sns.barplot(df.mean(axis=0).sort_values())
     plt.xticks(rotation=70)
     plt.tight_layout()
     plt.show()
