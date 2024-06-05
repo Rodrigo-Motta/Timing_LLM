@@ -19,104 +19,176 @@ from sklearn.cluster import KMeans
 
 # Function to remove stop words and lemmatize the words
 def remove_stopwords_lemmatize(string_list):
+    """
+    Removes stopwords and lemmatizes words in a list of strings.
+
+    Parameters
+    ----------
+    string_list : list of str
+        List of strings to be processed.
+
+    Returns
+    -------
+    list of str
+        List of processed strings with stopwords removed and words lemmatized.
+    """
+    # Initialize the set of stop words and the lemmatizer
     stop_words = set(stopwords.words('english'))
     lemmatizer = WordNetLemmatizer()
-    return [' '.join(lemmatizer.lemmatize(word.lower()) for word in string.split() if word.lower() not in stop_words) for string in string_list]
+
+    # Process each string in the list
+    return [' '.join(
+        lemmatizer.lemmatize(word.lower())
+        for word in string.split()
+        if word.lower() not in stop_words
+    )
+        for string in string_list]
+
 
 def intra_similaraties(data, model_list, num_refs, num_scrambles):
-    # Initialize arrays
-    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))  # (num_model, num_refs)
+    """
+    Calculates intra-similarities for scrambled joint raw scales using multiple models.
+
+    Parameters
+    ----------
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    model_list : list of str
+        List of model names to be used for embeddings.
+    num_refs : int
+        Number of references.
+    num_scrambles : int
+        Number of scrambles.
+
+    Returns
+    -------
+    np.ndarray
+        Array of distances for the dataset with joint sentences.
+    """
+    # Initialize array for storing distances
+    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))
     distances_array_joint_raw[:] = np.nan
 
-    # Loop over models
+    # Loop over each model
     for iModel, Model in enumerate(model_list):
         print(Model)
         model = SentenceTransformer(Model)
 
-        # Precompute embeddings for dataset with joint sentences
+        # Loop over each reference
         for iRef, Ref in enumerate(data.list_names):
             embed_list = []
+
+            # Scramble and encode data multiple times
             for scrambles in range(num_scrambles):
                 data.scramble_joint()
                 embeddings = [model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=True)]
                 embed_list.append(embeddings)
 
-            # Calculate distances for dataset with joint sentences
+            # Calculate distances between scrambled data
             for i in range(num_scrambles):
                 list_1 = embed_list[i][0]
 
                 for j in range(i, num_scrambles):
                     list_2 = embed_list[j][0]
                     dists = util.pytorch_cos_sim(list_1, list_2)
-                    #dists = util.dot_score(list_1, list_2)
                     distances_array_joint_raw[iModel, iRef, i, j] = dists
 
     return distances_array_joint_raw
 
-def similaraties(data,  model_list, num_refs, scrambled=False):
-    # Initialize arrays
-    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_refs)) #(num_model, num_refs)
+
+def similaraties(data, model_list, num_refs, scrambled=False):
+    """
+    Calculates similarities for joint raw scales using multiple models.
+
+    Parameters
+    ----------
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    model_list : list of str
+        List of model names to be used for embeddings.
+    num_refs : int
+        Number of references.
+    scrambled : bool, optional
+        Whether to use scrambled joint raw scales (default is False).
+
+    Returns
+    -------
+    np.ndarray
+        Array of distances for the dataset with joint sentences.
+    """
+    # Initialize array for storing distances
+    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_refs))
     distances_array_joint_raw[:] = np.nan
 
-    # Loop over models
+    # Loop over each model
     for iModel, Model in enumerate(model_list):
         print(Model)
         model = SentenceTransformer(Model)
 
-        # Precompute embeddings for dataset with joint sentences
-        # for iRef, Ref in enumerate(data.list_names):
-        #     print(data.list_names[iRef])
-        if scrambled == True:
+        # Encode data with or without scrambling
+        if scrambled:
             ref_embeddings_joint_raw = [model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=True) for
                                         Ref in data.list_names]
-
         else:
             ref_embeddings_joint_raw = [model.encode(data.scales_joint_raw[Ref], convert_to_tensor=True) for Ref in
-                                            data.list_names]
+                                        data.list_names]
 
-        # Calculate distances for dataset with joint sentences
+        # Calculate distances between encoded data
         for iRef in range(num_refs):
             list_1 = ref_embeddings_joint_raw[iRef]
 
             for iComp in range(iRef + 1, num_refs):
-                Comp = data.list_names[iComp]
                 list_2 = ref_embeddings_joint_raw[iComp]
 
                 dists = util.pytorch_cos_sim(list_1, list_2)
-                dists = util.dot_score(list_1, list_2)
-
                 distances_array_joint_raw[iModel, iRef, iComp] = dists
+
     return distances_array_joint_raw
 
-def similaraties_average(data,  model_list, num_refs, num_scrambles):
-    N = num_scrambles
 
-    # Initialize arrays
-    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_refs)) #(num_model, num_refs)
+def similaraties_average(data, model_list, num_refs, num_scrambles):
+    """
+    Calculates average similarities for scrambled joint raw scales using multiple models.
+
+    Parameters
+    ----------
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    model_list : list of str
+        List of model names to be used for embeddings.
+    num_refs : int
+        Number of references.
+    num_scrambles : int
+        Number of scrambles.
+
+    Returns
+    -------
+    tuple of np.ndarray
+        Average and standard deviation of distances for the dataset with joint sentences.
+    """
+    N = num_scrambles
+    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_refs))
     distances_array_joint_raw[:] = np.nan
 
-    # Loop over models
+    # Loop over each model
     for iModel, Model in enumerate(model_list):
         print(Model)
         model = SentenceTransformer(Model)
         all_dist = np.zeros((len(model_list), N, num_refs, num_refs))
+
+        # Perform multiple scrambles and calculate distances
         for n in range(N):
-            # Precompute embeddings for dataset with joint sentences
             data.scramble_joint()
             ref_embeddings_joint_raw = [model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=True) for
-                                            Ref in data.list_names]
+                                        Ref in data.list_names]
 
-            # Calculate distances for dataset with joint sentences
             for iRef in range(num_refs):
                 list_1 = ref_embeddings_joint_raw[iRef]
 
                 for iComp in range(iRef + 1, num_refs):
-                    Comp = data.list_names[iComp]
                     list_2 = ref_embeddings_joint_raw[iComp]
 
                     dists = util.pytorch_cos_sim(list_1, list_2)
-                    dists = util.dot_score(list_1, list_2)
-
                     distances_array_joint_raw[iModel, iRef, iComp] = dists
 
             all_dist[iModel, n, :, :] = distances_array_joint_raw[0, :, :]
@@ -126,18 +198,37 @@ def similaraties_average(data,  model_list, num_refs, num_scrambles):
 
     return average_dist, std_dist
 
+
 def get_embedding(data, model_list, num_refs, num_scrambles):
-    # Initialize arrays
-    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))  # (num_model, num_refs)
+    """
+    Generates embeddings for scrambled joint raw scales using multiple models.
+
+    Parameters
+    ----------
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    model_list : list of str
+        List of model names to be used for embeddings.
+    num_refs : int
+        Number of references.
+    num_scrambles : int
+        Number of scrambles.
+
+    Returns
+    -------
+    np.ndarray
+        Array of embeddings for the dataset with joint sentences.
+    """
+    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))
     distances_array_joint_raw[:] = np.nan
 
-    # Loop over models
+    # Loop over each model
     for iModel, Model in enumerate(model_list):
         print(Model)
         embed_list = []
         model = SentenceTransformer(Model)
 
-        # Precompute embeddings for dataset with joint sentences
+        # Loop over each reference and scramble data multiple times
         for iRef, Ref in enumerate(data.list_names):
             aux = []
             for scrambles in range(num_scrambles):
@@ -148,11 +239,27 @@ def get_embedding(data, model_list, num_refs, num_scrambles):
 
     return np.array(embed_list)
 
-def hierarquical_clustering(embed_arr,data):
-    # Step 4: Hierarchical Clustering
+
+def hierarquical_clustering(embed_arr, data):
+    """
+    Performs hierarchical clustering on embeddings and visualizes the dendrogram.
+
+    Parameters
+    ----------
+    embed_arr : np.ndarray
+        Array of embeddings.
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+
+    Returns
+    -------
+    np.ndarray
+        Linkage matrix.
+    """
+    # Perform hierarchical clustering
     linked = linkage(embed_arr, method='average', metric='cosine')
 
-    # Step 5: Visualization of the dendrogram
+    # Visualize the dendrogram
     plt.figure(figsize=(12, 6))
     dendrogram(linked,
                orientation='top',
@@ -164,282 +271,514 @@ def hierarquical_clustering(embed_arr,data):
     plt.title('Hierarchical Clustering Dendrogram')
     plt.tight_layout()
     plt.show()
+
     return linked
 
+
 def clusters(embed_arr, data, clusters):
+    """
+    Performs K-means clustering on embeddings.
+
+    Parameters
+    ----------
+    embed_arr : np.ndarray
+        Array of embeddings.
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    clusters : int
+        Number of clusters.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing embeddings, names, and cluster labels.
+    """
     df = pd.DataFrame(np.array(embed_arr))
     df['Names'] = data.list_names
 
-    kmeans = KMeans(n_clusters=clusters,init='k-means++', max_iter=300, n_init=10).fit(df.iloc[:, :-1])
+    # Perform K-means clustering
+    kmeans = KMeans(n_clusters=clusters, init='k-means++', max_iter=300, n_init=10).fit(df.iloc[:, :-1])
     df['cluster'] = pd.Categorical(kmeans.labels_)
+
     return df
 
+
 def convert_arr_to_pandas(distances_array_joint_raw, data):
-    ## Create Raw DataFrame
+    """
+    Converts a distance array to a symmetric pandas DataFrame.
+
+    Parameters
+    ----------
+    distances_array_joint_raw : np.ndarray
+        Array of distances.
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+
+    Returns
+    -------
+    pd.DataFrame
+        Symmetric DataFrame of distances.
+    """
+    # Create DataFrame and make it symmetric
     df = pd.DataFrame(data=np.nanmean(distances_array_joint_raw, axis=0), columns=data.list_names,
-                 index=data.list_names).replace(np.nan,0)
-    ## Convert upper triangular DataFrame to symmetric
+                      index=data.list_names).replace(np.nan, 0)
     df = (df + df.T).replace(0.0, 1.0)
 
     return df
 
+
 def min_max_norm(df):
+    """
+    Applies min-max normalization to a DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to be normalized.
+
+    Returns
+    -------
+    pd.DataFrame
+        Normalized DataFrame.
+    """
+    # Apply min-max normalization
     df = ((df - df.min().min()) / (df.max().max() - df.min().min()))
+
     return df
 
+
 def PCA_embeddings(arr, n_comp):
-    import numpy as np
+    """
+    Applies PCA to reduce the dimensionality of embeddings.
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Array of embeddings.
+    n_comp : int
+        Number of principal components.
+
+    Returns
+    -------
+    tuple of np.ndarray
+        Transformed embeddings and explained variance ratio.
+    """
     from sklearn.decomposition import PCA
 
+    # Perform PCA
     pca = PCA(n_components=n_comp)
     pca.fit(arr)
     X_pca = pca.fit_transform(arr)
 
     return X_pca, pca.explained_variance_ratio_
 
-def TSNE_embeddings(data,  model_list, n_comp):
-    import numpy as np
+
+def TSNE_embeddings(data, model_list, n_comp):
+    """
+    Applies t-SNE to reduce the dimensionality of embeddings.
+
+    Parameters
+    ----------
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    model_list : list of str
+        List of model names to be used for embeddings.
+    n_comp : int
+        Number of components for t-SNE.
+
+    Returns
+    -------
+    np.ndarray
+        Transformed embeddings.
+    """
     from sklearn.manifold import TSNE
 
-    # Initialize arrays
-
-    # Loop over models
+    # Loop over each model
     for iModel, Model in enumerate(model_list):
         print(Model)
         model = SentenceTransformer(Model)
 
-        # Precompute embeddings for dataset with joint sentences
-        # for iRef, Ref in enumerate(data.list_names):
-        #     print(data.list_names[iRef])
-        ref_embeddings_joint_raw = np.array([model.encode(data.scales_joint_raw[Ref], convert_to_tensor=False) for Ref in
-                                        data.list_names])
+        # Encode data
+        ref_embeddings_joint_raw = np.array(
+            [model.encode(data.scales_joint_raw[Ref], convert_to_tensor=False) for Ref in data.list_names])
 
-        X_embedded = TSNE(n_components=n_comp, learning_rate='auto',
-                          init = 'random', perplexity = 15, n_iter=300).fit_transform(ref_embeddings_joint_raw)
+        # Perform t-SNE
+        X_embedded = TSNE(n_components=n_comp, learning_rate='auto', init='random', perplexity=15,
+                          n_iter=300).fit_transform(ref_embeddings_joint_raw)
 
     return X_embedded
 
-def remove_triangle(df):
-    # Remove triangle of a symmetric matrix and the diagonal
 
+def remove_triangle(df):
+    """
+    Removes the upper triangle and diagonal of a symmetric matrix.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Symmetric DataFrame.
+
+    Returns
+    -------
+    np.ndarray
+        Array with upper triangle and diagonal removed.
+    """
+    # Remove upper triangle and diagonal
     df = df.astype(float)
     df.values[np.triu_indices_from(df, k=1)] = np.nan
     df = ((df.T).values.reshape((1, (df.shape[0]) ** 2)))
     df = df[~np.isnan(df)]
     df = df[df != 1]
-    return (df).reshape((1, len(df)))
+
+    return df.reshape((1, len(df)))
+
 
 def summarize(data, model_list, num_refs):
-    import torch
+    """
+    Summarizes the joint raw scales in one word using a pre-trained model.
+
+    Parameters
+    ----------
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    model_list : list of str
+        List of model names to be used for embeddings.
+    num_refs : int
+        Number of references.
+
+    Returns
+    -------
+    None
+    """
     from transformers import AutoTokenizer, AutoModelWithLMHead
 
+    # Initialize tokenizer and model
     tokenizer = AutoTokenizer.from_pretrained('T5-base')
     model = AutoModelWithLMHead.from_pretrained('T5-base', return_dict=True)
+
+    # Loop over each reference
     for iRef, Ref in enumerate(data.list_names):
         print(Ref)
         text = (data.scales_joint_raw[Ref])
-        # Replace the special characters with the correct quotation marks
         text = text.replace("?", '"').replace("?", "'")
-
-        # Remove the extra spaces and newlines
         text = text.strip().replace("\n", " ")
 
-        # Add a period at the end of the text if it is missing
         if not text.endswith("."):
             text = text + "."
 
+        # Prepare text for summarization
         t5_prepared_Text = "summarize in one word: " + text
         tokenized_text = tokenizer.encode(t5_prepared_Text, return_tensors="pt")
-        summary_ids = model.generate(tokenized_text,
-                                     num_beams=4,
-                                     no_repeat_ngram_size=3,
-                                     min_length=1,
-                                     max_length=3,
-                                     length_penalty=2.0,
-                                     temperature=0.8)
+        summary_ids = model.generate(tokenized_text, num_beams=4, no_repeat_ngram_size=3, min_length=1, max_length=3,
+                                     length_penalty=2.0, temperature=0.8)
         output = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
         print(output)
 
 
 ############### PLOTS #####################
 def plot_intra_barplot(arr, data):
+    """
+    Plots a bar plot of the intra-similarity scores with error bars.
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Array of distances.
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+
+    Returns
+    -------
+    None
+    """
+    # Calculate the mean and standard deviation of the distances
     mean = np.nanmean(np.nanmean(arr[0], axis=-1), axis=-1)
     error = np.nanstd(np.nanstd(arr[0], axis=-1), axis=-1)
+
+    # Plot the bar plot with error bars
     plt.bar(x=data.list_names, height=mean, yerr=error)
     plt.xticks(ticks=range(len(data.list_names)), labels=data.list_names, rotation=90)
     plt.tight_layout()
     plt.ylabel('Cosine Distance')
     plt.show()
 
+
 def plot_dendogram(df_Distances_joint_raw):
-    # Find the row and column labels for the maximum value with stopwords
+    """
+    Plots a dendrogram based on the distance matrix.
+
+    Parameters
+    ----------
+    df_Distances_joint_raw : pd.DataFrame
+        DataFrame containing the distance matrix.
+
+    Returns
+    -------
+    None
+    """
+    # Find the row and column labels for the maximum and minimum values
     max_joint_raw = df_Distances_joint_raw.stack().idxmax()
     max_row_label_joint_raw, max_col_label_joint_raw = max_joint_raw[0], max_joint_raw[1]
-    print(f"The maximum similarity value with stopwords is located between {max_row_label_joint_raw} and {max_col_label_joint_raw}")
+    print(
+        f"The maximum similarity value with stopwords is located between {max_row_label_joint_raw} and {max_col_label_joint_raw}")
 
-    # Find the row and column labels for the minimum value with stopwords
     min_joint_raw = df_Distances_joint_raw.stack().idxmin()
     min_row_label_joint_raw, min_col_label_joint_raw = min_joint_raw[0], min_joint_raw[1]
-    print(f"The minimum similarity value with stopwords is located between {min_row_label_joint_raw} and {min_col_label_joint_raw}")
+    print(
+        f"The minimum similarity value with stopwords is located between {min_row_label_joint_raw} and {min_col_label_joint_raw}")
 
     df_Distances_joint_raw = df_Distances_joint_raw.fillna(0)
 
+    # Convert similarities to dissimilarities
     Similarities = df_Distances_joint_raw.values
-    Distances = 1-Similarities # converting similarity values into dissimilarity values.
+    Distances = 1 - Similarities
     np.fill_diagonal(Distances, 0)
     Distances = squareform(Distances)
 
-    Z_joint_raw = linkage(Distances, method = 'average') # the method can be single, complete or average
-    # print(Z)
+    # Perform hierarchical clustering
+    Z_joint_raw = linkage(Distances, method='average')
 
-    c_joint_raw, coph_dists = cophenet(Z_joint_raw, Distances) # the cophenetic correlation coefficient measures how well the hierarchical clustering represented by the linkage matrix Z preserves the original distances in the distance matrix Distances.
+    # Calculate the cophenetic correlation coefficient
+    c_joint_raw, coph_dists = cophenet(Z_joint_raw, Distances)
     print(c_joint_raw)
 
-    f, ax = plt.subplots(figsize = (15, 6)) # f, ax = plt.subplots(figsize = (3.2, 10))
-    plt.ylabel('Distance', fontsize = 11, loc = 'center')
+    # Plot the dendrogram
+    f, ax = plt.subplots(figsize=(15, 6))
+    plt.ylabel('Distance', fontsize=11, loc='center')
     dendrogram(
         Z_joint_raw,
-        leaf_rotation = 90,  # rotates the x axis labels
-        leaf_font_size = 8,  # font size for the x axis labels
-        labels = df_Distances_joint_raw.columns,
-        # distance_sort = 'descending',
-        orientation = 'top',
-        color_threshold = .35,
-        above_threshold_color = '#7591a1', #bcbddc
-        ax = ax
+        leaf_rotation=90,
+        leaf_font_size=8,
+        labels=df_Distances_joint_raw.columns,
+        orientation='top',
+        color_threshold=0.35,
+        above_threshold_color='#7591a1',
+        ax=ax
     )
-    ax.set_yticks(np.arange(.001, 1.1, .25))
-    ax.set_yticklabels([0, .25, .5, .75, 1], fontsize = 6)
+    ax.set_yticks(np.arange(0.001, 1.1, 0.25))
+    ax.set_yticklabels([0, 0.25, 0.5, 0.75, 1], fontsize=6)
     plt.tight_layout()
     plt.show()
+
 
 def plot_heatmap(df):
-    plt.figure(figsize=(8,8))
-    sns.heatmap(df, annot = True)
+    """
+    Plots a heatmap of the given DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing the data to plot.
+
+    Returns
+    -------
+    None
+    """
+    plt.figure(figsize=(8, 8))
+    sns.heatmap(df, annot=True)
     plt.tight_layout()
     plt.show()
 
+
 def plot_node_degree(df):
-    plt.figure(figsize=(15,5))
+    """
+    Plots a bar plot of the average node degree.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing the node degrees.
+
+    Returns
+    -------
+    None
+    """
+    plt.figure(figsize=(15, 5))
     sns.barplot(df.mean(axis=0).sort_values())
     plt.xticks(rotation=70)
     plt.tight_layout()
     plt.show()
 
+
 def plot_PCA_embeddings(arr, list_names, clusters):
+    """
+    Plots a 2D PCA embedding scatter plot with clusters.
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Array of PCA embeddings.
+    list_names : list of str
+        List of names corresponding to the embeddings.
+    clusters : list of int
+        List of cluster labels.
+
+    Returns
+    -------
+    None
+    """
     df = pd.DataFrame(arr)
     df['Names'] = list_names
-
     df['cluster'] = clusters
 
-    plt.figure(figsize=(8,8))
+    plt.figure(figsize=(8, 8))
+    p1 = sns.scatterplot(x=0, y=1, data=df, s=100, legend=False, hue="cluster")
 
-    p1 = sns.scatterplot(x=0,  # Horizontal axis
-                         y=1,  # Vertical axis
-                         data=df,  # Data source
-                         s=100,
-                         legend=False,
-                         hue="cluster")
-
+    # Add text labels to the plot
     for line in range(0, df.shape[0]):
-        p1.text(df.iloc[line, 0] + 0.01, df.iloc[line, 1],
-                df.Names[line], horizontalalignment='left',
-                size='small', color='black', weight='normal')
+        p1.text(df.iloc[line, 0] + 0.01, df.iloc[line, 1], df.Names[line], horizontalalignment='left', size='small',
+                color='black', weight='normal')
 
     plt.title('Embedding')
-    # Set x-axis label
     plt.xlabel('PC_0')
-    # Set y-axis label
     plt.ylabel('PC_1')
-    plt.xlim(-.6,.6)
-    plt.ylim(-.6,.6)
+    plt.xlim(-0.6, 0.6)
+    plt.ylim(-0.6, 0.6)
     plt.tight_layout()
     plt.show()
 
+
 def plot_3D_PCA(arr, list_names, clusters):
+    """
+    Plots a 3D PCA embedding scatter plot with clusters.
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Array of PCA embeddings.
+    list_names : list of str
+        List of names corresponding to the embeddings.
+    clusters : list of int
+        List of cluster labels.
+
+    Returns
+    -------
+    None
+    """
     df = pd.DataFrame(arr)
     df['Names'] = list_names
-
     df['cluster'] = clusters
 
-    # Creating a 3D scatter plot
     fig = plt.figure(figsize=(15, 8))
     ax = fig.add_subplot(111, projection='3d')
 
     # Scatter plot
-    scatter = ax.scatter(df.iloc[:,0], df.iloc[:,1], df.iloc[:,2],
-                         s=100, c=df['cluster'], cmap='viridis')
+    scatter = ax.scatter(df.iloc[:, 0], df.iloc[:, 1], df.iloc[:, 2], s=100, c=df['cluster'], cmap='viridis')
 
-    # Adding annotations to each point
+    # Add text labels to the plot
     for line in range(0, df.shape[0]):
-        ax.text(df.iloc[line, 0], df.iloc[line, 1], df.iloc[line, 2], df['Names'][line],
-                horizontalalignment='left', size='small', color='black', weight='normal')
+        ax.text(df.iloc[line, 0], df.iloc[line, 1], df.iloc[line, 2], df['Names'][line], horizontalalignment='left',
+                size='small', color='black', weight='normal')
 
-    # Titles and labels
     plt.title('3D Embedding')
     ax.set_xlabel('PC_0')
     ax.set_ylabel('PC_1')
     ax.set_zlabel('PC_2')
-    ax.set_xlim(-.3,.3)
-    ax.set_ylim(-.3,.3)
-    ax.set_zlim(-.3,.3)
-
+    ax.set_xlim(-0.3, 0.3)
+    ax.set_ylim(-0.3, 0.3)
+    ax.set_zlim(-0.3, 0.3)
     plt.tight_layout()
     plt.show()
 
+
 def PCA_Kmeans_clusters(arr, list_names, clusters):
+    """
+    Performs K-means clustering on PCA embeddings.
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Array of PCA embeddings.
+    list_names : list of str
+        List of names corresponding to the embeddings.
+    clusters : int
+        Number of clusters.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing the PCA embeddings, names, and cluster labels.
+    """
     df = pd.DataFrame(arr)
     df['Names'] = list_names
 
+    # Perform K-means clustering
     kmeans = KMeans(n_clusters=clusters).fit(df.iloc[:, :-1])
     df['cluster'] = pd.Categorical(kmeans.labels_)
+
     return df
 
+
 def plot_3D_PCA_controls(arr, list_names):
+    """
+    Plots a 3D PCA embedding scatter plot with highlighted controls.
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Array of PCA embeddings.
+    list_names : list of str
+        List of names corresponding to the embeddings.
+
+    Returns
+    -------
+    None
+    """
     df = pd.DataFrame(arr)
     df['Names'] = list_names
+
     # Define the points that you want to highlight
     highlight_points = ['DASS', 'RESS']
-    df['color'] = df.index.where(df['Q'].isin(highlight_points), 'Other')
+    df['color'] = df.index.where(df['Names'].isin(highlight_points), 'Other')
 
-    # Creating a 3D scatter plot
     fig = plt.figure(figsize=(15, 8))
     ax = fig.add_subplot(111, projection='3d')
 
     # Plot all non-highlighted points using a single color
     other_points = df[df['color'] == 'Other']
-    ax.scatter(other_points.iloc[:, 0], other_points.iloc[:, 1], other_points.iloc[:, 2],
-               s=100, c='grey', label='Other', alpha=0.6)
+    ax.scatter(other_points.iloc[:, 0], other_points.iloc[:, 1], other_points.iloc[:, 2], s=100, c='grey',
+               label='Other', alpha=0.6)
 
     # Highlight the specific points (DASS and RESS)
     highlighted_points = df[df['color'] != 'Other']
-    ax.scatter(highlighted_points.iloc[:, 0], highlighted_points.iloc[:, 1], highlighted_points.iloc[:, 2],
-               s=150, c='red', label='Controls', alpha=0.8)
+    ax.scatter(highlighted_points.iloc[:, 0], highlighted_points.iloc[:, 1], highlighted_points.iloc[:, 2], s=150,
+               c='red', label='Controls', alpha=0.8)
 
-    df = df[(df.Q == 'RESS') | (df.Q == 'DASS')].reset_index().drop(columns='index')
+    # Add text labels to the plot
     for line in range(0, df.shape[0]):
-        ax.text(df.iloc[line, 0] + 0.05, df.iloc[line, 1], df.iloc[line, 2], df['Q'][line],
-        horizontalalignment = 'left', size = 'small', color = 'black', weight = 'bold')
+        ax.text(df.iloc[line, 0] + 0.05, df.iloc[line, 1], df.iloc[line, 2], df['Names'][line],
+                horizontalalignment='left', size='small', color='black', weight='bold')
 
-    # Titles and labels
     plt.title('3D PCA Embedding')
     ax.set_xlabel('PC_0')
     ax.set_ylabel('PC_1')
     ax.set_zlabel('PC_2')
-    #ax.set_xlim(3*-0.3, 3*0.3)
-    #ax.set_ylim(3*-0.3, 3*0.3)
-    #ax.set_zlim(3*-0.3, 3*0.3)
-
-    # Legend
-    ax.legend()
     plt.tight_layout()
     plt.show()
 
+
 def create_network(data, df_Distances_joint_raw):
+    """
+    Creates a network graph from the distance matrix.
+
+    Parameters
+    ----------
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    df_Distances_joint_raw : pd.DataFrame
+        DataFrame containing the distance matrix.
+
+    Returns
+    -------
+    networkx.Graph
+        Network graph.
+    """
     names = data.list_names
     adjacency_matrix = df_Distances_joint_raw.values
+
     # Initialize an empty graph
     graph = nx.Graph()
+
     # Add edges with weights from the adjacency matrix
     num_nodes = len(adjacency_matrix)
     for i in range(num_nodes):
@@ -449,11 +788,25 @@ def create_network(data, df_Distances_joint_raw):
 
     return graph
 
+
 def plot_chord(graph):
+    """
+    Plots a chord diagram for the network graph.
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+        Network graph.
+
+    Returns
+    -------
+    None
+    """
     hv.extension("bokeh")
 
     adjacency_matrix = nx.adjacency_matrix(graph).todense()
     names = list(graph.nodes())
+
     # Create a data structure suitable for a chord diagram
     edges = []
     num_nodes = len(adjacency_matrix)
@@ -463,37 +816,28 @@ def plot_chord(graph):
             if weight != 0:
                 edges.append((names[i], names[j], weight))
 
-    # Convert to DataFrame for manipulation and normalization
     edges_df = pd.DataFrame(edges, columns=["source", "target", "value"])
 
-    # Calculate node degrees (number of links per node)
+    # Calculate node degrees
     degrees = dict(graph.degree(names, weight='weight'))
 
     # Normalize degrees and create a colormap using 'Blues'
     norm = colors.Normalize(vmin=min(degrees.values()), vmax=max(degrees.values()))
     colormap = cm.ScalarMappable(norm=norm, cmap='Blues')
-
-    # Apply color mapping to each node
     color_df = pd.DataFrame({'index': names, 'color': [colormap.to_rgba(degrees[name]) for name in names]})
-
-    # Convert RGBA colors to hex values
     color_df['color'] = color_df['color'].apply(lambda rgba: colors.to_hex(rgba))
 
     edges_df['color'] = edges_df.merge(color_df, how='inner', left_on='source', right_on='index')['color']
-
     cmap = colors.ListedColormap(color_df['color'].values)
 
     # Calculate the average weight
     average_weight = edges_df['value'].mean() + 1.5 * edges_df['value'].std()
-
-    # Filter edges above the average weight
     edges_df.loc[edges_df['value'] < average_weight, 'value'] = 0.0001
 
     min_weight = edges_df['value'].min()
     max_weight = edges_df['value'].max()
     edges_df['line_width'] = (edges_df['value'] - min_weight) / (max_weight - min_weight) * 10
 
-    # Combine nodes and filtered edges
     chord = hv.Chord(edges_df)
     chord.opts(
         labels='index',
@@ -501,89 +845,101 @@ def plot_chord(graph):
         edge_color='color',
         node_cmap=cmap,
         edge_cmap=cmap,
-        edge_line_width=hv.dim('value'),  # line_width
+        edge_line_width=hv.dim('value'),
         width=1000, height=1000
     )
 
-    # chord = hv.Chord(edges_df)
-    # chord.opts(
-    #     labels='index',
-    #     node_color='index',
-    #     edge_color=hv.dim('source').str(),
-    #     node_cmap='Category20',
-    #     edge_cmap=cmap,
-    #     edge_line_width=hv.dim('value'),  # line_width
-    #     width=1000, height=1000
-    # )
-
-    # Display the chord diagram
     output_file("chord_diagram.html")
     show(hv.render(chord, backend='bokeh'))
 
+
 def invert_weights(graph, max_weight=None):
+    """
+    Inverts the weights of the edges in the graph.
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+        Network graph.
+    max_weight : float, optional
+        Maximum weight for inversion (default is None).
+
+    Returns
+    -------
+    networkx.Graph
+        Graph with inverted weights.
+    """
     new_graph = nx.Graph()
 
     if max_weight is None:
         max_weight = max(data['weight'] for u, v, data in graph.edges(data=True))
 
     for u, v, data in graph.edges(data=True):
-        # Inverting weights so higher weight becomes less costly
         new_weight = max_weight - data['weight']
         new_graph.add_edge(u, v, weight=new_weight)
 
     return new_graph
 
+
 def shortest_path(graph):
-    # Calculate all pairs' shortest path distances using weights
+    """
+    Calculates shortest path properties of the graph.
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+        Network graph.
+
+    Returns
+    -------
+    dict
+        Dictionary containing shortest path properties.
+    """
     shortest_paths = dict(nx.all_pairs_dijkstra_path_length(graph, weight='weight'))
 
-    # Calculate the weighted average path length
     if nx.is_connected(graph):
         avg_path_length = nx.average_shortest_path_length(graph, weight='weight')
     else:
         avg_path_length = "Graph is not connected, cannot calculate average path length."
 
-    # Calculate eccentricity
     eccentricity = nx.eccentricity(graph, sp=shortest_paths)
-
-    # Calculate diameter
     diameter = nx.diameter(graph, e=eccentricity)
 
     print("Shortest Paths (all pairs):", shortest_paths)
     print("Average Path Length (weighted):", avg_path_length)
     print("Eccentricity (weighted):", eccentricity)
     print("Diameter (weighted):", diameter)
+
     graph_prop = {
-    "Shortest Paths (all pairs)" : shortest_paths,
-    "Average Path Length (weighted)" : avg_path_length,
-    "Eccentricity (weighted)" : eccentricity,
-    "Diameter (weighted)" : diameter,
+        "Shortest Paths (all pairs)": shortest_paths,
+        "Average Path Length (weighted)": avg_path_length,
+        "Eccentricity (weighted)": eccentricity,
+        "Diameter (weighted)": diameter,
     }
     return graph_prop
 
+
 def graph_properties(graph):
-    # Assume the graph is already loaded or created
-    # `graph` is a NetworkX graph where the edge weights represent semantic similarity
+    """
+    Calculates various properties of the network graph.
 
-    # Weighted Degree (Strength)
+    Parameters
+    ----------
+    graph : networkx.Graph
+        Network graph.
+
+    Returns
+    -------
+    tuple
+        DataFrame containing node-specific properties and dictionary of global metrics.
+    """
     weighted_degrees = dict(graph.degree(weight='weight'))
-
-    # Weighted Clustering Coefficient
     weighted_clustering_coefficients = nx.clustering(graph, weight='weight')
-
-    # Weighted Betweenness Centrality
     weighted_betweenness = nx.betweenness_centrality(graph, weight='weight')
-
-    # Weighted Closeness Centrality
     weighted_closeness = nx.closeness_centrality(graph, distance='weight')
-
-    # Weighted Modularity (Community Detection via Louvain method)
     partition = community_louvain.best_partition(graph, weight='weight')
-
-    # Weighted Eigenvector Centrality
     weighted_eigenvector = nx.eigenvector_centrality(graph, weight='weight')
 
-    # Combine individual properties into a DataFrame
     df = pd.DataFrame({
         'Weighted Degree': weighted_degrees,
         'Weighted Clustering Coefficient': weighted_clustering_coefficients,
@@ -593,7 +949,6 @@ def graph_properties(graph):
         'Weighted Eigenvector Centrality': weighted_eigenvector
     })
 
-    # Adding global metrics that are not node-specific
     total_weight = sum(data['weight'] for u, v, data in graph.edges(data=True))
     num_possible_edges = len(graph) * (len(graph) - 1) / 2
     weighted_density = total_weight / num_possible_edges
@@ -605,7 +960,6 @@ def graph_properties(graph):
         'Assortativity (Weight Correlation)': weight_correlations
     }
 
-    # Display the DataFrame and global metrics
     print("Node-Specific Properties DataFrame:")
     print(df)
 
@@ -615,37 +969,46 @@ def graph_properties(graph):
 
     return df, global_metrics
 
+
 def plot_dendrogram_and_heatmap(df_Distances_joint_raw):
+    """
+    Plots an aligned dendrogram and heatmap based on the distance matrix.
+
+    Parameters
+    ----------
+    df_Distances_joint_raw : pd.DataFrame
+        DataFrame containing the distance matrix.
+
+    Returns
+    -------
+    None
+    """
     from scipy.cluster.hierarchy import linkage, fcluster
 
     df_Distances_joint_raw = df_Distances_joint_raw.fillna(0)
 
     Similarities = df_Distances_joint_raw.values
-    Distances = 1-Similarities # converting similarity values into dissimilarity values.
+    Distances = 1 - Similarities
     np.fill_diagonal(Distances, 0)
     Distances = squareform(Distances)
 
-    Z = linkage(Distances, method = 'average') # the method can be single, complete or average
+    Z = linkage(Distances, method='average')
 
-    # print(Z)
-    # Assign clusters using the flat cluster method
     clusters = fcluster(Z, 3, criterion='maxclust')
 
-    # Create a mapping from clusters to colors
     unique_clusters = np.unique(clusters)
     colors = sns.color_palette("Set2", len(unique_clusters))
     lut = dict(zip(unique_clusters, colors))
     row_colors = (clusters).map(lut)
 
-    # Create a cluster map with seaborn
     g = sns.clustermap(
         df_Distances_joint_raw,
-        metric='euclidean',  # You can also use 'correlation' or other distance metrics
-        method='average',  # Clustering method: 'single', 'complete', 'average', etc.
-        cmap='coolwarm',  # Color scheme for the heatmap
+        metric='euclidean',
+        method='average',
+        cmap='coolwarm',
         figsize=(12, 8),
-        annot=False,  # Set to True to display the values in the cells
-        cbar_kws={'label': 'Similarity Score'},  # Customize the color bar
+        annot=False,
+        cbar_kws={'label': 'Similarity Score'},
         xticklabels=True,
         yticklabels=True,
         col_cluster=False,
@@ -653,10 +1016,7 @@ def plot_dendrogram_and_heatmap(df_Distances_joint_raw):
         dendrogram_ratio=(.1, .2)
     )
 
-    # Customize the plot with title, etc.
     g.fig.suptitle('Aligned Dendrogram and Heatmap', fontsize=16)
     g.ax_heatmap.set_xlabel('Questionnaires', fontsize=12)
     g.ax_heatmap.set_ylabel('Questionnaires', fontsize=12)
-
-    # Show the plot
     plt.show()
