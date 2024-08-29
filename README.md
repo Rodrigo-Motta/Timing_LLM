@@ -32,8 +32,9 @@ This repository contains the implementation and datasets for the paper "Utilizin
     ```
 
 2. Create a enviroment
+
     ```bash
-conda create -n time_llm python=3.9
+    conda create -n time_llm python=3.9
     ``` 
 
 3. Install the required packages (the working directory should be the project):
