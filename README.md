@@ -1,10 +1,11 @@
 # Utilizing large language models for semantic analysis in psychological measurement: An examination of subjective time and depression scales
 
-Thiago Augusto de Souza Bonifácio (1*), Rodrigo da Motta Cabral de Carvalho (1) , and André Mascioli Cravo (2)
+Thiago Augusto de Souza Bonifácio (1*), Rodrigo da Motta Cabral de Carvalho (1,3) , and André Mascioli Cravo (2)
 
 
-1 Graduate Program in Neuroscience and Cognition, Federal University of ABC, São Paulo, Brazil
-2 Center for Mathematics, Computing and Cognition, Federal University of ABC, São Paulo, Brazil
+(1) Graduate Program in Neuroscience and Cognition, Federal University of ABC, São Paulo, Brazil
+(2) Center for Mathematics, Computing and Cognition, Federal University of ABC, São Paulo, Brazil
+(3) Department of Biomedical Engineering, School of Biomedical Engineering and Imaging Sciences, King’s College London, London, UK
 
 ## Overview
 
@@ -19,6 +20,8 @@ This repository contains the implementation and datasets for the paper "Utilizin
 5. [License](#license)
 6. [Acknowledgments](#acknowledgments)
 
+## Overview of the encoding framework
+![Screenshot 2024-08-29 at 12 49 12](https://github.com/user-attachments/assets/7b186068-6d94-4f24-9b4e-cc9fca08d627)
 
 
 ## Installation
