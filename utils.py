@@ -540,7 +540,7 @@ def plot_dendrogram(df_Similarities, threshold=0.35, x_fontsize=10):
     Distances = squareform(Distances)
 
     # Perform hierarchical clustering
-    Z = linkage(Distances, method='average')
+    Z = linkage(Distances, method='average', metric='cosine')
 
     # Calculate the cophenetic correlation coefficient
     c, coph_dists = cophenet(Z, Distances)
@@ -1000,7 +1000,7 @@ def plot_dendrogram_and_heatmap(df_Similarities):
     np.fill_diagonal(Distances, 0)
     Distances = squareform(Distances)
 
-    Z = linkage(Distances, method='average')
+    Z = linkage(Distances, method='average', metric='cosine')
 
     clusters = fcluster(Z, 3, criterion='maxclust')
 
