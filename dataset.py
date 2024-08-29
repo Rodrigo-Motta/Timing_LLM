@@ -1,105 +1,67 @@
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from scipy.stats import pearsonr
-from scipy.cluster.hierarchy import cophenet # cophenet is used to calculate the cophenetic correlation coefficient, which measures how well a hierarchical clustering preserves the original pairwise distances between data points.
-from scipy.spatial.distance import squareform # squareform is used to convert a condensed distance matrix into a square distance matrix, which is a common format for hierarchical clustering algorithms.
-from scipy.cluster.hierarchy import dendrogram, linkage
-import nltk, numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as sns
-from utils import remove_stopwords_lemmatize
-# Here we import the scales we will use
-import scales_time
-import eiko_depression_scales
-from scales_time import *
+import nltk
 import random
+from utils import remove_stopwords_lemmatize
+from data.time_scales import *
 
-dler = nltk.downloader.Downloader()
-dler._update_index()
-
-dler.download('wordnet')
-dler.download('stopwords')
+# Download necessary NLTK data
+nltk.downloader.Downloader()._update_index()
+nltk.download('wordnet')
+nltk.download('stopwords')
 
 class DatasetLoader:
     """
-    A class to load and preprocess datasets.
+    A class to load, preprocess, and manipulate textual data from a given module, specifically focusing on scales and 
+    sentences. This class provides methods to remove stopwords, lemmatize text, concatenate scales, and scramble 
+    sentences within the scales.
 
-    ...
-
-    Attributes
-    ----------
+    Attributes:
+    -----------
     all_names : list
-        List of all attribute names from the module scales_time.
+        A list of all names defined in the provided module.
+    
     filtered_names : filter
-        Filtered list of attribute names excluding special names.
+        A filtered list of names, excluding special names that start and end with '__'.
+    
     list_names : list
-        List of filtered attribute names.
+        A list of variable names containing scales and sentences from the module.
+    
     scales_raw : dict
-        Dictionary containing raw scales and their sentences.
+        A dictionary containing the raw scales data from the module, with variable names as keys and sentence lists as values.
+    
     scales_preprocessed : dict
-        Dictionary containing preprocessed scales with stopwords removed and lemmatized sentences.
-    scales_joint_raw : dict
-        Dictionary containing joint raw scales where sentences are joined and periods are properly spaced.
-    scales_joint_scrambled : dict
-        Dictionary containing scrambled raw scales.
-    scales_joint_raw_scrambled : dict
-        Dictionary containing joint scrambled raw scales where sentences are joined and periods are properly spaced.
+        A dictionary containing preprocessed scales where stopwords have been removed and words have been lemmatized.
 
-    Methods
-    -------
-    __init__():
-        Initializes the DatasetLoader by loading and preprocessing the scales.
+    Methods:
+    --------
+    __init__(module):
+        Initializes the DatasetLoader with a given module, extracts the relevant data, and preprocesses it.
+
     scales_joint():
-        Creates a joint raw scale where sentences are joined and periods are properly spaced.
+        Concatenates text representations of scales, maintaining sentence separation with added spaces after periods.
+        Sets the attribute `scales_joint_raw` as a dictionary with keys as variable names and values as concatenated strings.
+
     scramble_joint():
-        Scrambles the joint raw scales and creates a joint scrambled raw scale where sentences are joined and periods are properly spaced.
+        Randomly scrambles the order of sentences within each scale and concatenates them.
+        Sets the attributes `scales_joint_scrambled` and `scales_joint_raw_scrambled` with scrambled sentences and their concatenated forms.
     """
-
-    def __init__(self):
-        """
-        Constructs all the necessary attributes for the DatasetLoader object.
-
-        Parameters
-        ----------
-        None
-        """
+    def __init__(self, module):
         # Get the list of all names defined in the module
-        self.all_names = dir(scales_time)
+        self.all_names = dir(module)
         # Filter out the special names that start and end with '__'
         self.filtered_names = filter(lambda name: not (name.startswith('__') and name.endswith('__')), self.all_names)
         self.list_names = list(self.filtered_names)
 
         # Create a dictionary containing scales and sentences
-        self.scales_raw = {name: getattr(scales_time, name) for name in self.list_names}
+        self.scales_raw = {name: getattr(module, name) for name in self.list_names}
 
         # Process all variables in the dictionary
         self.scales_preprocessed = {variable: remove_stopwords_lemmatize(string_list) for variable, string_list in self.scales_raw.items()}
 
     def scales_joint(self):
-        """
-        Creates a joint raw scale where sentences are joined and periods are properly spaced.
-
-        Parameters
-        ----------
-        None
-
-        Returns
-        -------
-        None
-        """
-        self.scales_joint_raw = {variable: "".join(string_list).replace(".", ". ") for variable, string_list in self.scales_raw.items()}
+        self.scales_joint_raw = {variable: "".join(string_list).replace(".", ". ") for variable, string_list in
+                                 self.scales_raw.items()}
 
     def scramble_joint(self):
-        """
-        Scrambles the joint raw scales and creates a joint scrambled raw scale where sentences are joined and periods are properly spaced.
-
-        Parameters
-        ----------
-        None
-
-        Returns
-        -------
-        None
-        """
-        self.scales_joint_scrambled = {name: random.sample(values, len(values)) for name, values in self.scales_raw.items()}
-        self.scales_joint_raw_scrambled = {variable: "".join(string_list).replace(".", ". ") for variable, string_list in self.scales_joint_scrambled.items()}
+        self.scales_joint_scrambled = randomized_dict = {name: random.sample(values, len(values)) for name, values in self.scales_raw.items()}
+        self.scales_joint_raw_scrambled = {variable: "".join(string_list).replace(".", ". ") for variable, string_list in
+                                           self.scales_joint_scrambled.items()}

@@ -17,7 +17,6 @@ import matplotlib.cm as cm
 import community as community_louvain
 from sklearn.cluster import KMeans
 
-# Function to remove stop words and lemmatize the words
 def remove_stopwords_lemmatize(string_list):
     """
     Removes stopwords and lemmatizes words in a list of strings.
@@ -45,9 +44,9 @@ def remove_stopwords_lemmatize(string_list):
         for string in string_list]
 
 
-def intra_similaraties(data, model_list, num_refs, num_scrambles):
+def intra_similarities(data, model_list, num_refs, num_scrambles):
     """
-    Calculates intra-similarities for scrambled joint raw scales using multiple models.
+    Calculates intra-similarities for scrambled and joint scales using multiple models.
 
     Parameters
     ----------
@@ -63,11 +62,11 @@ def intra_similaraties(data, model_list, num_refs, num_scrambles):
     Returns
     -------
     np.ndarray
-        Array of distances for the dataset with joint sentences.
+        Array of cosine similarities for the dataset with joint sentences.
     """
-    # Initialize array for storing distances
-    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))
-    distances_array_joint_raw[:] = np.nan
+    # Initialize array for storing similarities
+    similarities_array = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))
+    similarities_array[:] = np.nan
 
     # Loop over each model
     for iModel, Model in enumerate(model_list):
@@ -84,21 +83,21 @@ def intra_similaraties(data, model_list, num_refs, num_scrambles):
                 embeddings = [model.encode(data.scales_joint_raw_scrambled[Ref], convert_to_tensor=True)]
                 embed_list.append(embeddings)
 
-            # Calculate distances between scrambled data
+            # Calculate similarities between scrambled data
             for i in range(num_scrambles):
                 list_1 = embed_list[i][0]
 
                 for j in range(i, num_scrambles):
                     list_2 = embed_list[j][0]
                     dists = util.pytorch_cos_sim(list_1, list_2)
-                    distances_array_joint_raw[iModel, iRef, i, j] = dists
+                    similarities_array[iModel, iRef, i, j] = dists
 
-    return distances_array_joint_raw
+    return similarities_array
 
 
-def similaraties(data, model_list, num_refs, scrambled=False):
+def similarities(data, model_list, num_refs, scrambled=False):
     """
-    Calculates similarities for joint raw scales using multiple models.
+    Calculates similarities for joint scales using multiple models.
 
     Parameters
     ----------
@@ -114,11 +113,11 @@ def similaraties(data, model_list, num_refs, scrambled=False):
     Returns
     -------
     np.ndarray
-        Array of distances for the dataset with joint sentences.
+        Array of similarities for the dataset with joint sentences.
     """
     # Initialize array for storing distances
-    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_refs))
-    distances_array_joint_raw[:] = np.nan
+    similarities_array = np.zeros((len(model_list), num_refs, num_refs))
+    similarities_array[:] = np.nan
 
     # Loop over each model
     for iModel, Model in enumerate(model_list):
@@ -133,7 +132,7 @@ def similaraties(data, model_list, num_refs, scrambled=False):
             ref_embeddings_joint_raw = [model.encode(data.scales_joint_raw[Ref], convert_to_tensor=True) for Ref in
                                         data.list_names]
 
-        # Calculate distances between encoded data
+        # Calculate similarities between encoded data
         for iRef in range(num_refs):
             list_1 = ref_embeddings_joint_raw[iRef]
 
@@ -141,14 +140,14 @@ def similaraties(data, model_list, num_refs, scrambled=False):
                 list_2 = ref_embeddings_joint_raw[iComp]
 
                 dists = util.pytorch_cos_sim(list_1, list_2)
-                distances_array_joint_raw[iModel, iRef, iComp] = dists
+                similarities_array[iModel, iRef, iComp] = dists
 
-    return distances_array_joint_raw
+    return similarities_array
 
 
-def similaraties_average(data, model_list, num_refs, num_scrambles):
+def similarities_average(data, model_list, num_refs, num_scrambles):
     """
-    Calculates average similarities for scrambled joint raw scales using multiple models.
+    Calculates average similarities for scrambled joint scales using multiple models.
 
     Parameters
     ----------
@@ -164,17 +163,17 @@ def similaraties_average(data, model_list, num_refs, num_scrambles):
     Returns
     -------
     tuple of np.ndarray
-        Average and standard deviation of distances for the dataset with joint sentences.
+        Average and standard deviation of similarities for the dataset with joint sentences.
     """
     N = num_scrambles
-    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_refs))
-    distances_array_joint_raw[:] = np.nan
+    similarities_array = np.zeros((len(model_list), num_refs, num_refs))
+    similarities_array[:] = np.nan
 
     # Loop over each model
     for iModel, Model in enumerate(model_list):
         print(Model)
         model = SentenceTransformer(Model)
-        all_dist = np.zeros((len(model_list), N, num_refs, num_refs))
+        all_similarities = np.zeros((len(model_list), N, num_refs, num_refs))
 
         # Perform multiple scrambles and calculate distances
         for n in range(N):
@@ -188,15 +187,15 @@ def similaraties_average(data, model_list, num_refs, num_scrambles):
                 for iComp in range(iRef + 1, num_refs):
                     list_2 = ref_embeddings_joint_raw[iComp]
 
-                    dists = util.pytorch_cos_sim(list_1, list_2)
-                    distances_array_joint_raw[iModel, iRef, iComp] = dists
+                    similarities = util.pytorch_cos_sim(list_1, list_2)
+                    similarities_array[iModel, iRef, iComp] = similarities
 
-            all_dist[iModel, n, :, :] = distances_array_joint_raw[0, :, :]
+            all_similarities[iModel, n, :, :] = similarities_array[0, :, :]
 
-    average_dist = all_dist.mean(axis=1)
-    std_dist = all_dist.std(axis=1)
+    average_similarities = all_similarities.mean(axis=1)
+    std_similarities = all_similarities.std(axis=1)
 
-    return average_dist, std_dist
+    return average_similarities, std_similarities
 
 
 def get_embedding(data, model_list, num_refs, num_scrambles):
@@ -219,8 +218,8 @@ def get_embedding(data, model_list, num_refs, num_scrambles):
     np.ndarray
         Array of embeddings for the dataset with joint sentences.
     """
-    distances_array_joint_raw = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))
-    distances_array_joint_raw[:] = np.nan
+    similarities_array = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))
+    similarities_array[:] = np.nan
 
     # Loop over each model
     for iModel, Model in enumerate(model_list):
@@ -303,25 +302,24 @@ def clusters(embed_arr, data, clusters):
     return df
 
 
-def convert_arr_to_pandas(distances_array_joint_raw, data):
+def convert_arr_to_pandas(similarity_array, list_names):
     """
     Converts a distance array to a symmetric pandas DataFrame.
+    
+    Parameters:
+    similarity_array (np.ndarray): A 2D array of similarities.
+    list_names (list): A list of names to use for columns and index.
 
-    Parameters
-    ----------
-    distances_array_joint_raw : np.ndarray
-        Array of distances.
-    data : DatasetLoader
-        DatasetLoader object containing the data.
-
-    Returns
-    -------
-    pd.DataFrame
-        Symmetric DataFrame of distances.
+    Returns:
+    pd.DataFrame: Symmetric DataFrame of similarities.
     """
+    # Ensure list_names is provided and is the right length
+    if len(list_names) != similarity_array.shape[1]:
+        raise ValueError("The length of list_names must match the dimensions of the similarity array.")
+
     # Create DataFrame and make it symmetric
-    df = pd.DataFrame(data=np.nanmean(distances_array_joint_raw, axis=0), columns=data.list_names,
-                      index=data.list_names).replace(np.nan, 0)
+    df = pd.DataFrame(data=np.nanmean(similarity_array, axis=0), columns=list_names,
+                      index=list_names).replace(np.nan, 0)
     df = (df + df.T).replace(0.0, 1.0)
 
     return df
@@ -343,6 +341,25 @@ def min_max_norm(df):
     """
     # Apply min-max normalization
     df = ((df - df.min().min()) / (df.max().max() - df.min().min()))
+
+    return df
+
+def standard_scaler(df):
+    """
+    Applies standard scaling (z-score normalization) to a DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to be standardized.
+
+    Returns
+    -------
+    pd.DataFrame
+        Standardized DataFrame with mean 0 and standard deviation 1.
+    """
+    # Apply standard scaling
+    df = (df - df.mean()) / df.std()
 
     return df
 
@@ -483,7 +500,7 @@ def plot_intra_barplot(arr, data):
     Parameters
     ----------
     arr : np.ndarray
-        Array of distances.
+        Array of similarities.
     data : DatasetLoader
         DatasetLoader object containing the data.
 
@@ -499,64 +516,55 @@ def plot_intra_barplot(arr, data):
     plt.bar(x=data.list_names, height=mean, yerr=error)
     plt.xticks(ticks=range(len(data.list_names)), labels=data.list_names, rotation=90)
     plt.tight_layout()
-    plt.ylabel('Cosine Distance')
+    plt.ylabel('Cosine Similarity')
     plt.show()
 
 
-def plot_dendogram(df_Distances_joint_raw):
+def plot_dendrogram(df_Similarities, threshold=0.35, x_fontsize=10):
     """
-    Plots a dendrogram based on the distance matrix.
+    Plots a dendrogram based on the normalized similarity.
 
     Parameters
     ----------
-    df_Distances_joint_raw : pd.DataFrame
-        DataFrame containing the distance matrix.
-
-    Returns
-    -------
-    None
+    df_Similarities : pd.DataFrame
+        DataFrame containing the normalized similarity matrix.
+    threshold : float, optional
+        The threshold to apply when forming flat clusters (default is 0.35).
+    x_fontsize : int, optional
+        Font size for x-axis labels (default is 10).
     """
-    # Find the row and column labels for the maximum and minimum values
-    max_joint_raw = df_Distances_joint_raw.stack().idxmax()
-    max_row_label_joint_raw, max_col_label_joint_raw = max_joint_raw[0], max_joint_raw[1]
-    print(
-        f"The maximum similarity value with stopwords is located between {max_row_label_joint_raw} and {max_col_label_joint_raw}")
-
-    min_joint_raw = df_Distances_joint_raw.stack().idxmin()
-    min_row_label_joint_raw, min_col_label_joint_raw = min_joint_raw[0], min_joint_raw[1]
-    print(
-        f"The minimum similarity value with stopwords is located between {min_row_label_joint_raw} and {min_col_label_joint_raw}")
-
-    df_Distances_joint_raw = df_Distances_joint_raw.fillna(0)
-
     # Convert similarities to dissimilarities
-    Similarities = df_Distances_joint_raw.values
+    Similarities = df_Similarities.values
     Distances = 1 - Similarities
     np.fill_diagonal(Distances, 0)
     Distances = squareform(Distances)
 
     # Perform hierarchical clustering
-    Z_joint_raw = linkage(Distances, method='average')
+    Z = linkage(Distances, method='average')
 
     # Calculate the cophenetic correlation coefficient
-    c_joint_raw, coph_dists = cophenet(Z_joint_raw, Distances)
-    print(c_joint_raw)
+    c, coph_dists = cophenet(Z, Distances)
+    # print(f"Cophenetic correlation coefficient: {c}")
 
     # Plot the dendrogram
     f, ax = plt.subplots(figsize=(15, 6))
-    plt.ylabel('Distance', fontsize=11, loc='center')
+    plt.ylabel('Distance', fontsize=12, loc='center')
     dendrogram(
-        Z_joint_raw,
-        leaf_rotation=90,
-        leaf_font_size=8,
-        labels=df_Distances_joint_raw.columns,
+        Z,
+        leaf_rotation=45,
+        leaf_font_size=10,
+        labels=df_Similarities.columns,
         orientation='top',
-        color_threshold=0.35,
-        above_threshold_color='#7591a1',
+        color_threshold=threshold,
+        above_threshold_color='#55a1ab',
         ax=ax
     )
+    
+    # Set font size for x-axis labels
+    plt.tick_params(axis='x', labelsize=x_fontsize)
+    
     ax.set_yticks(np.arange(0.001, 1.1, 0.25))
-    ax.set_yticklabels([0, 0.25, 0.5, 0.75, 1], fontsize=6)
+    ax.set_yticklabels([0, 0.25, 0.5, 0.75, 1], fontsize=12)
     plt.tight_layout()
     plt.show()
 
@@ -575,7 +583,7 @@ def plot_heatmap(df):
     None
     """
     plt.figure(figsize=(8, 8))
-    sns.heatmap(df, annot=True)
+    sns.heatmap(df, annot=False)
     plt.tight_layout()
     plt.show()
 
@@ -757,16 +765,16 @@ def plot_3D_PCA_controls(arr, list_names):
     plt.show()
 
 
-def create_network(data, df_Distances_joint_raw):
+def create_network(data, df_Similarities):
     """
-    Creates a network graph from the distance matrix.
+    Creates a network graph from the similarity matrix.
 
     Parameters
     ----------
     data : DatasetLoader
         DatasetLoader object containing the data.
-    df_Distances_joint_raw : pd.DataFrame
-        DataFrame containing the distance matrix.
+    df_Similarities : pd.DataFrame
+        DataFrame containing the similarity matrix.
 
     Returns
     -------
@@ -774,7 +782,7 @@ def create_network(data, df_Distances_joint_raw):
         Network graph.
     """
     names = data.list_names
-    adjacency_matrix = df_Distances_joint_raw.values
+    adjacency_matrix = df_Similarities.values
 
     # Initialize an empty graph
     graph = nx.Graph()
@@ -970,14 +978,14 @@ def graph_properties(graph):
     return df, global_metrics
 
 
-def plot_dendrogram_and_heatmap(df_Distances_joint_raw):
+def plot_dendrogram_and_heatmap(df_Similarities):
     """
     Plots an aligned dendrogram and heatmap based on the distance matrix.
 
     Parameters
     ----------
-    df_Distances_joint_raw : pd.DataFrame
-        DataFrame containing the distance matrix.
+    df_Similarities : pd.DataFrame
+        DataFrame containing the similarity matrix.
 
     Returns
     -------
@@ -985,9 +993,9 @@ def plot_dendrogram_and_heatmap(df_Distances_joint_raw):
     """
     from scipy.cluster.hierarchy import linkage, fcluster
 
-    df_Distances_joint_raw = df_Distances_joint_raw.fillna(0)
+    df_Similarities = df_Similarities.fillna(0)
 
-    Similarities = df_Distances_joint_raw.values
+    Similarities = df_Similarities.values
     Distances = 1 - Similarities
     np.fill_diagonal(Distances, 0)
     Distances = squareform(Distances)
@@ -1002,7 +1010,7 @@ def plot_dendrogram_and_heatmap(df_Distances_joint_raw):
     row_colors = (clusters).map(lut)
 
     g = sns.clustermap(
-        df_Distances_joint_raw,
+        df_Similarities,
         metric='euclidean',
         method='average',
         cmap='coolwarm',
