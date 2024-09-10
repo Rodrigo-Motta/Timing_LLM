@@ -30,8 +30,8 @@ This repository contains the implementation and datasets for the paper "Utilizin
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/rodrigo-motta/brain-ising-gnn.git
-    cd brain-ising-gnn
+    git clone https://github.com/rodrigo-motta/Timing_LLM.git
+    cd Timing_LLM
     ```
 
 2. Create a enviroment
