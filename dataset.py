@@ -16,8 +16,6 @@ class DatasetLoader:
 
     Attributes:
     -----------
-    all_names : list
-        A list of all names defined in the provided module.
     
     filtered_names : filter
         A filtered list of names, excluding special names that start and end with '__'.
@@ -45,10 +43,8 @@ class DatasetLoader:
         Sets the attributes `scales_joint_scrambled` and `scales_joint_raw_scrambled` with scrambled sentences and their concatenated forms.
     """
     def __init__(self, module):
-        # Get the list of all names defined in the module
-        self.all_names = dir(module)
         # Filter out the special names that start and end with '__'
-        self.filtered_names = filter(lambda name: not (name.startswith('__') and name.endswith('__')), self.all_names)
+        self.filtered_names = filter(lambda name: not (name.startswith('__') and name.endswith('__')), dir(module))
         self.list_names = list(self.filtered_names)
 
         # Create a dictionary containing scales and sentences
@@ -58,7 +54,7 @@ class DatasetLoader:
         self.scales_preprocessed = {variable: remove_stopwords_lemmatize(string_list) for variable, string_list in self.scales_raw.items()}
 
     def scales_joint(self):
-        self.scales_joint_raw = {variable: "".join(string_list).replace(".", ". ") for variable, string_list in
+        self.scales_joint_raw = {variable: " ".join(string_list).replace(".", ". ") for variable, string_list in
                                  self.scales_raw.items()}
 
     def scramble_joint(self):

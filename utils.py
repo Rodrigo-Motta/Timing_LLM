@@ -3,9 +3,8 @@ from nltk.stem import WordNetLemmatizer
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.stats import pearsonr
-from scipy.cluster.hierarchy import cophenet # cophenet is used to calculate the cophenetic correlation coefficient, which measures how well a hierarchical clustering preserves the original pairwise distances between data points.
-from scipy.spatial.distance import squareform # squareform is used to convert a condensed distance matrix into a square distance matrix, which is a common format for hierarchical clustering algorithms.
-from scipy.cluster.hierarchy import dendrogram, linkage
+from scipy.spatial.distance import squareform,pdist # squareform is used to convert a condensed distance matrix into a square distance matrix, which is a common format for hierarchical clustering algorithms.
+from scipy.cluster.hierarchy import dendrogram, linkage,cophenet
 import nltk, numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as sns
 from sentence_transformers import SentenceTransformer, util
 import networkx as nx
@@ -16,6 +15,12 @@ import matplotlib.colors as colors
 import matplotlib.cm as cm
 import community as community_louvain
 from sklearn.cluster import KMeans
+import random
+from gensim.models.doc2vec import Doc2Vec, TaggedDocument
+from nltk.tokenize import word_tokenize
+import nltk
+nltk.download('punkt')
+
 
 def remove_stopwords_lemmatize(string_list):
     """
@@ -144,6 +149,157 @@ def similarities(data, model_list, num_refs, scrambled=False):
 
     return similarities_array
 
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from gensim.models.doc2vec import Doc2Vec, TaggedDocument
+from sklearn.metrics.pairwise import cosine_similarity
+
+def similarities_average_classical(data, model_list, num_refs, num_scrambles):
+    """
+    Calculates average similarities for scrambled joint scales using TF-IDF and Doc2Vec models.
+
+    Parameters
+    ----------
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    model_list : list of str
+        List of model names to be used for embeddings ('tfidf', 'doc2vec').
+    num_refs : int
+        Number of references.
+    num_scrambles : int
+        Number of scrambles.
+
+    Returns
+    -------
+    tuple of np.ndarray
+        Average and standard deviation of similarities for the dataset with joint sentences.
+    """
+    N = num_scrambles
+    similarities_array = np.zeros((len(model_list), num_refs, num_refs))
+    similarities_array[:] = np.nan
+
+    all_similarities = np.zeros((len(model_list), N, num_refs, num_refs))
+
+    # Loop over each model (TF-IDF or Doc2Vec)
+    for iModel, Model in enumerate(model_list):
+        print(f"Processing model: {Model}")
+
+        if Model == "tfidf":
+            # # Fit TF-IDF on all the raw sentences at once to ensure consistent vocabulary
+            # all_sentences = [data.scales_joint_raw_scrambled[Ref] for Ref in data.list_names]
+            # vectorizer = TfidfVectorizer()
+            # vectorizer.fit(all_sentences)
+
+            # Combine all texts before scrambling to fit a global vocabulary
+            all_texts = list(data.scales_joint_raw.values())
+            vectorizer = TfidfVectorizer()  # TF-IDF vectorizer
+            vectorizer.fit(all_texts)  # Fit on the entire corpus to fix the vocabulary
+
+
+        elif Model == "doc2vec":
+
+            # Create and train Doc2Vec model
+            documents = list(data.scales_joint_raw.values())
+            # Shuffle and select half of the documents at random
+            random.shuffle(documents)
+            training_documents = documents[:len(documents) // 2]
+            tokenized_data = [word_tokenize(document.lower()) for document in training_documents]
+
+            # Creating TaggedDocument objects
+            tagged_data = [TaggedDocument(words=words, tags=[str(idx)])
+                        for idx, words in enumerate(tokenized_data)]
+
+            doc2vec_model = Doc2Vec(vector_size=100, window=3, min_count=1, workers=4, epochs=1000)
+
+            doc2vec_model.build_vocab(tagged_data)
+            doc2vec_model.train(tagged_data, total_examples=doc2vec_model.corpus_count,
+            epochs=doc2vec_model.epochs)
+
+        # Perform multiple scrambles and calculate distances
+        for n in range(N):
+            data.scramble_joint()  # Assuming it scrambles the data
+
+            # Generate embeddings for the scrambled data
+            if Model == "tfidf":
+                ref_embeddings_joint_raw = [vectorizer.transform([data.scales_joint_raw_scrambled[Ref]]).toarray().mean(axis=0) for Ref in data.list_names]#.toarray()[0] for Ref in data.list_names]
+            elif Model == "doc2vec":
+                ref_embeddings_joint_raw = [doc2vec_model.infer_vector(word_tokenize(data.scales_joint_raw_scrambled[Ref].lower())) for Ref in data.list_names]
+
+            # Calculate pairwise cosine similarities between references
+            for iRef in range(num_refs):
+                list_1 = ref_embeddings_joint_raw[iRef]
+
+                for iComp in range(iRef + 1, num_refs):
+                    list_2 = ref_embeddings_joint_raw[iComp]
+
+                    # Calculate cosine similarity
+                    #similarities = cosine_similarity([list_1], [list_2])[0][0]  # Works for both TF-IDF and Doc2Vec
+                    similarities = util.pytorch_cos_sim([list_1], [list_2])
+                    similarities_array[iModel, iRef, iComp] = similarities
+
+            all_similarities[iModel, n, :, :] = similarities_array[iModel, :, :]
+
+    # Compute average and standard deviation over scrambles
+    average_similarities = all_similarities.mean(axis=1)
+    std_similarities = all_similarities.std(axis=1)
+
+    return average_similarities, std_similarities
+
+def similarities_average_gpt(data, model_list, num_refs, num_scrambles):
+    """
+    Calculates average similarities for scrambled joint scales using multiple models.
+
+    Parameters
+    ----------
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    model_list : list of str
+        List of model names to be used for embeddings.
+    num_refs : int
+        Number of references.
+    num_scrambles : int
+        Number of scrambles.
+
+    Returns
+    -------
+    tuple of np.ndarray
+        Average and standard deviation of similarities for the dataset with joint sentences.
+    """
+    N = num_scrambles
+    similarities_array = np.zeros((len(model_list), num_refs, num_refs))
+    similarities_array[:] = np.nan
+
+    client = OpenAI(
+        # defaults to os.environ.get("OPENAI_API_KEY")
+        api_key="openAI_key",
+                )
+
+    # Loop over each model
+    for iModel, Model in enumerate(model_list):
+        print(Model)
+        all_similarities = np.zeros((len(model_list), N, num_refs, num_refs))
+
+        # Perform multiple scrambles and calculate distances
+        for n in range(N):
+            data.scramble_joint()
+            ref_embeddings_joint_raw = [client.embeddings.create(input=data.scales_joint_raw_scrambled[Ref], model="text-embedding-3-small").data[0].embedding[:]
+ for Ref in data.list_names]
+
+            for iRef in range(num_refs):
+                list_1 = ref_embeddings_joint_raw[iRef]
+
+                for iComp in range(iRef + 1, num_refs):
+                    list_2 = ref_embeddings_joint_raw[iComp]
+
+                    similarities = util.pytorch_cos_sim(list_1, list_2)
+                    similarities_array[iModel, iRef, iComp] = similarities
+
+            all_similarities[iModel, n, :, :] = similarities_array[0, :, :]
+
+    average_similarities = all_similarities.mean(axis=1)
+    std_similarities = all_similarities.std(axis=1)
+
+    return average_similarities, std_similarities
 
 def similarities_average(data, model_list, num_refs, num_scrambles):
     """
@@ -197,6 +353,53 @@ def similarities_average(data, model_list, num_refs, num_scrambles):
 
     return average_similarities, std_similarities
 
+#from openai import OpenAI
+from openai import OpenAI
+import pandas as pd
+
+def get_embedding_gpt(data, model_list, num_refs, num_scrambles):
+    """
+    Generates embeddings for scrambled joint raw scales using multiple models.
+
+    Parameters
+    ----------
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    model_list : list of str
+        List of model names to be used for embeddings.
+    num_refs : int
+        Number of references.
+    num_scrambles : int
+        Number of scrambles.
+
+    Returns
+    -------
+    np.ndarray
+        Array of embeddings for the dataset with joint sentences.
+    """
+            
+    client = OpenAI(
+        # defaults to os.environ.get("OPENAI_API_KEY")
+        api_key="openAI_key",
+                )
+    similarities_array = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))
+    similarities_array[:] = np.nan
+
+    # Loop over each model
+    for iModel, Model in enumerate(model_list):
+        print(Model)
+        embed_list = []
+
+        # Loop over each reference and scramble data multiple times
+        for iRef, Ref in enumerate(data.list_names):
+            aux = []
+            for scrambles in range(num_scrambles):
+                data.scramble_joint()
+                embeddings = [client.embeddings.create(input=data.scales_joint_raw_scrambled[Ref], model="text-embedding-3-small").data[0].embedding[:]]
+                aux.append(embeddings)
+            embed_list.append(np.array(aux).mean(axis=0))
+
+    return np.array(embed_list)
 
 def get_embedding(data, model_list, num_refs, num_scrambles):
     """
@@ -238,6 +441,85 @@ def get_embedding(data, model_list, num_refs, num_scrambles):
 
     return np.array(embed_list)
 
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from gensim.models.doc2vec import Doc2Vec, TaggedDocument
+
+def get_embedding_classical(data, model_list, num_refs, num_scrambles):
+    """
+    Generates embeddings for scrambled joint raw scales using classical models (TF-IDF, Doc2Vec).
+
+    Parameters
+    ----------
+    data : DatasetLoader
+        DatasetLoader object containing the data.
+    model_list : list of str
+        List of model names to be used for embeddings ('tfidf', 'doc2vec').
+    num_refs : int
+        Number of references.
+    num_scrambles : int
+        Number of scrambles.
+
+    Returns
+    -------
+    np.ndarray
+        Array of embeddings for the dataset with joint sentences.
+    """
+    # Initialize array to hold the results
+    similarities_array = np.zeros((len(model_list), num_refs, num_scrambles, num_scrambles))
+    similarities_array[:] = np.nan
+
+    # Loop over each model (TF-IDF or Doc2Vec)
+    for iModel, Model in enumerate(model_list):
+        print(f"Processing model: {Model}")
+        embed_list = []
+
+        if Model == "tfidf":
+            # Combine all texts before scrambling to fit a global vocabulary
+            all_texts = list(data.scales_joint_raw.values())
+            vectorizer = TfidfVectorizer()  # TF-IDF vectorizer
+            vectorizer.fit(all_texts)  # Fit on the entire corpus to fix the vocabulary
+
+        elif Model == "doc2vec":
+            # Create and train Doc2Vec model
+            documents = [TaggedDocument(doc, [i]) for i, doc in enumerate(data.scales_joint_raw.values())]
+            # Shuffle and select half of the documents at random
+            random.shuffle(documents)
+            training_documents = documents[:len(documents) // 2]
+            doc2vec_model = Doc2Vec(vector_size=100, window=5, min_count=1, workers=4)
+
+            doc2vec_model.build_vocab(training_documents)
+            doc2vec_model.train(training_documents, total_examples=doc2vec_model.corpus_count,
+            epochs=doc2vec_model.epochs)
+
+# Output to verify the selected docum
+        # Loop over each reference and scramble data multiple times
+        for iRef, Ref in enumerate(data.list_names):
+            aux = []
+
+            # Scramble data num_scrambles times
+            for scrambles in range(num_scrambles):
+                data.scramble_joint()  # Assuming this scrambles the raw text
+
+                # Extract the scrambled sentences for the current reference
+                scrambled_sentence = data.scales_joint_raw_scrambled[Ref]
+
+                if Model == "tfidf":
+                    # Generate TF-IDF embeddings (always same dimensionality because of fixed vocabulary)
+                    embeddings = vectorizer.transform([scrambled_sentence]).toarray()
+
+                elif Model == "doc2vec":
+                    # Generate Doc2Vec embeddings
+                    embeddings = doc2vec_model.infer_vector(scrambled_sentence.split())
+
+                aux.append(embeddings)
+
+            # Convert the list to a NumPy array and take the mean across scrambles
+            aux_array = np.vstack(aux)  # Stack them into a consistent shape
+            embed_list.append(aux_array.mean(axis=0))  # Take the mean of the embeddings
+
+        return np.array(embed_list)
+
 
 def hierarquical_clustering(embed_arr, data):
     """
@@ -255,8 +537,14 @@ def hierarquical_clustering(embed_arr, data):
     np.ndarray
         Linkage matrix.
     """
+
     # Perform hierarchical clustering
     linked = linkage(embed_arr, method='average', metric='cosine')
+
+    # Compute the Cophenetic Correlation Coefficient
+    cophenetic_distances, cophenet_corrcoef = cophenet(linked, pdist(embed_arr))
+
+    print(f"Cophenetic Correlation Coefficient: {cophenet_corrcoef}")
 
     # Visualize the dendrogram
     plt.figure(figsize=(12, 6))
@@ -540,19 +828,22 @@ def plot_dendrogram(df_Similarities, threshold=0.35, x_fontsize=10):
     Distances = squareform(Distances)
 
     # Perform hierarchical clustering
-    Z = linkage(Distances, method='average', metric='cosine')
+    # Perform hierarchical clustering
+    linked = linkage(Distances, method='average', metric='cosine')
 
-    # Calculate the cophenetic correlation coefficient
-    c, coph_dists = cophenet(Z, Distances)
-    # print(f"Cophenetic correlation coefficient: {c}")
+    # Compute the Cophenetic Correlation Coefficient
+    cophenetic_distances, cophenet_corrcoef = cophenet(linked, pdist(Distances))
+
+    print(f"Cophenetic Correlation Coefficient: {cophenet_corrcoef}")
+
 
     # Plot the dendrogram
     f, ax = plt.subplots(figsize=(15, 6))
     plt.ylabel('Distance', fontsize=12, loc='center')
     dendrogram(
         Z,
-        leaf_rotation=45,
-        leaf_font_size=10,
+        leaf_rotation=90,
+        leaf_font_size=14,
         labels=df_Similarities.columns,
         orientation='top',
         color_threshold=threshold,
@@ -561,7 +852,7 @@ def plot_dendrogram(df_Similarities, threshold=0.35, x_fontsize=10):
     )
     
     # Set font size for x-axis labels
-    plt.tick_params(axis='x', labelsize=x_fontsize)
+    plt.tick_params(axis='x', labelsize=x_fontsize,rotation=90)
     
     ax.set_yticks(np.arange(0.001, 1.1, 0.25))
     ax.set_yticklabels([0, 0.25, 0.5, 0.75, 1], fontsize=12)
