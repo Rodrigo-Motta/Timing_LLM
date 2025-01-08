@@ -4,7 +4,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.stats import pearsonr
 from scipy.spatial.distance import squareform,pdist # squareform is used to convert a condensed distance matrix into a square distance matrix, which is a common format for hierarchical clustering algorithms.
-from scipy.cluster.hierarchy import dendrogram, linkage,cophenet
+from scipy.cluster.hierarchy import dendrogram, linkage, cophenet, fcluster
 import nltk, numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as sns
 from sentence_transformers import SentenceTransformer, util
 import networkx as nx
@@ -807,10 +807,10 @@ def plot_intra_barplot(arr, data):
     plt.ylabel('Cosine Similarity')
     plt.show()
 
-
-def plot_dendrogram(df_Similarities, threshold=0.35, x_fontsize=10):
+def plot_dendrogram_clusters(df_Similarities, threshold=0.35):
     """
-    Plots a dendrogram based on the normalized similarity.
+    Plots a dendrogram based on the normalized similarity matrix and returns the linkage matrix
+    and a DataFrame with scale names and cluster numbers.
 
     Parameters
     ----------
@@ -818,8 +818,13 @@ def plot_dendrogram(df_Similarities, threshold=0.35, x_fontsize=10):
         DataFrame containing the normalized similarity matrix.
     threshold : float, optional
         The threshold to apply when forming flat clusters (default is 0.35).
-    x_fontsize : int, optional
-        Font size for x-axis labels (default is 10).
+
+    Returns
+    -------
+    Z_joint_raw : np.ndarray
+        The linkage matrix.
+    df_clusters : pd.DataFrame
+        DataFrame containing scale names and their corresponding cluster numbers.
     """
     # Convert similarities to dissimilarities
     Similarities = df_Similarities.values
@@ -828,36 +833,40 @@ def plot_dendrogram(df_Similarities, threshold=0.35, x_fontsize=10):
     Distances = squareform(Distances)
 
     # Perform hierarchical clustering
-    # Perform hierarchical clustering
-    linked = linkage(Distances, method='average', metric='cosine')
+    Z = linkage(Distances, method='average')
 
-    # Compute the Cophenetic Correlation Coefficient
-    cophenetic_distances, cophenet_corrcoef = cophenet(linked, pdist(Distances))
-
-    print(f"Cophenetic Correlation Coefficient: {cophenet_corrcoef}")
-
+    # Calculate the cophenetic correlation coefficient
+    c, coph_dists = cophenet(Z, Distances)
+    print(f"Cophenetic correlation coefficient: {c}")
 
     # Plot the dendrogram
     f, ax = plt.subplots(figsize=(15, 6))
-    plt.ylabel('Distance', fontsize=12, loc='center')
+    plt.ylabel('Distance', fontsize=11, loc='center')
     dendrogram(
         Z,
         leaf_rotation=90,
-        leaf_font_size=14,
+        leaf_font_size=8,
         labels=df_Similarities.columns,
         orientation='top',
         color_threshold=threshold,
         above_threshold_color='#55a1ab',
         ax=ax
     )
-    
-    # Set font size for x-axis labels
-    plt.tick_params(axis='x', labelsize=x_fontsize,rotation=90)
-    
     ax.set_yticks(np.arange(0.001, 1.1, 0.25))
-    ax.set_yticklabels([0, 0.25, 0.5, 0.75, 1], fontsize=12)
+    ax.set_yticklabels([0, 0.25, 0.5, 0.75, 1], fontsize=6)
     plt.tight_layout()
     plt.show()
+
+    # Assign cluster numbers to each scale
+    cluster_labels = fcluster(Z, t=threshold, criterion='distance')
+
+    # Create a DataFrame with scale names and cluster numbers
+    df_clusters = pd.DataFrame({
+        'Scale': df_Similarities.columns,
+        'Cluster': cluster_labels
+    })
+
+    return Z, df_clusters  # Return the linkage matrix and the cluster DataFrame
 
 
 def plot_heatmap(df):
@@ -1282,8 +1291,7 @@ def plot_dendrogram_and_heatmap(df_Similarities):
     -------
     None
     """
-    from scipy.cluster.hierarchy import linkage, fcluster
-
+    
     df_Similarities = df_Similarities.fillna(0)
 
     Similarities = df_Similarities.values
