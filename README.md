@@ -49,8 +49,6 @@ This repository contains the implementation and datasets for the paper "Utilizin
 
 1.	Subjective Time Scales: The data for subjective time scales were gathered through a systematic literature search across databases like PsycNET, PubMed, Scopus, and Web of Science. This search identified 30 self-report scales related to subjective time, published between 1994 and 2023, focusing on various constructs like time perception, temporal orientation, and time perspective.
 
-2.	Depression Scales: The depression scales included were well-established measures, such as the Beck Depression Inventory-II, Inventory of Depressive Symptomatology, Montgomery-Asberg Depression Rating Scale, and others. These scales were used to compare similarities and assess potential content overlap.
-
 ### Data Access
 
 Under request.
