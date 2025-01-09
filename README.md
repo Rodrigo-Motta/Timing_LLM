@@ -51,7 +51,7 @@ This repository contains the implementation and datasets for the paper "Utilizin
 
 ### Data Access
 
-Under request.
+Data is public available in OSF Supplemental Materials: https://osf.io/rj3kx/ 
 
 ## Usage
 
